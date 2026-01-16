@@ -1,0 +1,87 @@
+[gd_scene load_steps=9 format=3 uid="uid://drjc5r8avo8up"]
+
+[ext_resource type="Script" uid="uid://ch080dmn64ygp" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://dsmw1x7ntksq1" path="res://scripts/grid.gd" id="2_grid"]
+[ext_resource type="Script" uid="uid://b3p2smssppwjc" path="res://scripts/notes_view.gd" id="3_notes_view"]
+[ext_resource type="Script" uid="uid://rt8866hvdk3s" path="res://scripts/playhead.gd" id="4_playhead"]
+[ext_resource type="Script" uid="uid://c4i1uxvobvx03" path="res://scripts/input_controller.gd" id="5_input_controller"]
+[ext_resource type="Script" uid="uid://cun1k6fkn06ry" path="res://scripts/notes_model.gd" id="6_notes_model"]
+[ext_resource type="Script" uid="uid://c22jau4ufnahh" path="res://scripts/piano_keyboard.gd" id="7_piano_keyboard"]
+[ext_resource type="Script" uid="uid://cgru658h6m61p" path="res://scripts/input_debug_overlay.gd" id="8_input_debug"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+
+[node name="PianoKeyboard" type="Control" parent="."]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+clip_contents = true
+script = ExtResource("7_piano_keyboard")
+
+[node name="RollPanel" type="Control" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+clip_contents = true
+
+[node name="RollContent" type="Control" parent="RollPanel"]
+layout_mode = 1
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+grow_horizontal = 0
+grow_vertical = 0
+size_flags_horizontal = 0
+size_flags_vertical = 0
+
+[node name="Grid" type="Control" parent="RollPanel/RollContent"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_grid")
+
+[node name="NotesLayer" type="Control" parent="RollPanel/RollContent"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_notes_view")
+
+[node name="Playhead" type="Control" parent="RollPanel/RollContent"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_playhead")
+
+[node name="InputDebug" type="Control" parent="RollPanel/RollContent"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("8_input_debug")
+
+[node name="NotesModel" type="Node" parent="."]
+script = ExtResource("6_notes_model")
+
+[node name="InputController" type="Node" parent="."]
+script = ExtResource("5_input_controller")
