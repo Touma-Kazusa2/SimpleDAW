@@ -73,14 +73,14 @@ func _update_scrollbars(
 	if h_scroll_spacer != null:
 		h_scroll_spacer.custom_minimum_size = Vector2(max(0.0, keyboard_width), 0)
 	h_scroll.min_value = 0.0
-	h_scroll.max_value = max_x
-	h_scroll.page = view_width
-	h_scroll.value = scroll_x
+	h_scroll.max_value = max_x + max(view_width, 0.0)
+	h_scroll.page = max(view_width, 0.0)
+	h_scroll.value = clamp(scroll_x, 0.0, max_x)
 	h_scroll.visible = max_x > 0.0
 	v_scroll.min_value = 0.0
-	v_scroll.max_value = max_y
-	v_scroll.page = view_height
-	v_scroll.value = scroll_y
+	v_scroll.max_value = max_y + max(view_height, 0.0)
+	v_scroll.page = max(view_height, 0.0)
+	v_scroll.value = clamp(scroll_y, 0.0, max_y)
 	v_scroll.visible = max_y > 0.0
 	updating_scrollbars = false
 

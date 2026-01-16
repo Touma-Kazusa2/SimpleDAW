@@ -126,4 +126,4 @@ size_flags_vertical = 3
 
 [connection signal="pressed" from="RootLayout/TopBar/TopBarContent/BrowserToggle" to="." method="_on_browser_toggle_pressed"]
 [connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScroll" to="." method="_on_h_scroll_changed"]
-[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/VScroll" to="." method="_on_v_scroll_changed"]\n
+[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/VScroll" to="." method="_on_v_scroll_changed"]
