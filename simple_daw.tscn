@@ -1,0 +1,65 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://main.tscn" id="1_pianoroll"]
+
+[node name="SimpleDAW" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MainSplit" type="HSplitContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BrowserPanel" type="PanelContainer" parent="MainSplit"]
+custom_minimum_size = Vector2(220, 0)
+size_flags_vertical = 3
+
+[node name="BrowserLabel" type="Label" parent="MainSplit/BrowserPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "浏览器"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RightSplit" type="VSplitContainer" parent="MainSplit"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="TransportPanel" type="PanelContainer" parent="MainSplit/RightSplit"]
+custom_minimum_size = Vector2(0, 120)
+size_flags_horizontal = 3
+
+[node name="TransportLabel" type="Label" parent="MainSplit/RightSplit/TransportPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Transport"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PianoRollPanel" type="PanelContainer" parent="MainSplit/RightSplit"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="PianoRoll" parent="MainSplit/RightSplit/PianoRollPanel" instance=ExtResource("1_pianoroll")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

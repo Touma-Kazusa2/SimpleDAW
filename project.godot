@@ -13,7 +13,7 @@ config_version=5
 [application]
 
 config/name="SimpleDAW"
-run/main_scene="res://main.tscn"
+run/main_scene="res://simple_daw.tscn"
 config/features=PackedStringArray("4.5")
 
 [display]
