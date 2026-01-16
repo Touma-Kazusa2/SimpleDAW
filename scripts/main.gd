@@ -76,6 +76,9 @@ func _ready() -> void:
 
 func _apply_config() -> void:
 	var prev_height = last_content_height
+	var min_key_height = _get_min_key_height_for_view()
+	if min_key_height > 0.0:
+		key_height = max(key_height, min_key_height)
 	var grid_width = visible_beats * pixels_per_beat
 	var grid_height = (max_pitch - min_pitch + 1) * key_height
 
@@ -123,6 +126,7 @@ func _apply_config() -> void:
 		visible_beats
 	)
 	last_view_width = roll_panel.size.x
+	last_view_height = roll_panel.size.y
 	_sync_viewport()
 
 func _process(delta: float) -> void:
@@ -203,7 +207,9 @@ func _input(event: InputEvent) -> void:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 			var delta = -event.relative.y * KEY_HEIGHT_DRAG_SCALE
 			if abs(delta) > 0.001:
-				key_height = clamp(key_height + delta, MIN_KEY_HEIGHT, MAX_KEY_HEIGHT)
+				var min_key_height = _get_min_key_height_for_view()
+				var clamped_min = max(MIN_KEY_HEIGHT, min_key_height)
+				key_height = clamp(key_height + delta, clamped_min, MAX_KEY_HEIGHT)
 				_apply_config()
 
 func _update_playhead() -> void:
@@ -266,7 +272,12 @@ func _update_layout() -> void:
 
 func _on_resized() -> void:
 	_update_layout()
-	_sync_viewport()
+	var min_key_height = _get_min_key_height_for_view()
+	if min_key_height > 0.0 and key_height < min_key_height:
+		key_height = min_key_height
+		_apply_config()
+	else:
+		_sync_viewport()
 
 func _print_scroll_state(source: String) -> void:
 	var max_x = max(0.0, roll_content.size.x - roll_panel.size.x)
@@ -306,6 +317,18 @@ func _emit_scroll_changed() -> void:
 	var max_x = max(0.0, roll_content.size.x - roll_panel.size.x)
 	var max_y = max(0.0, roll_content.size.y - roll_panel.size.y)
 	emit_signal("scroll_changed", scroll_x, scroll_y, max_x, max_y, roll_panel.size.x, roll_panel.size.y)
+
+func _get_min_key_height_for_view() -> float:
+	if roll_panel == null:
+		return MIN_KEY_HEIGHT
+	var key_count = max(1, max_pitch - min_pitch + 1)
+	var view_height = roll_panel.size.y
+	if view_height <= 0.0:
+		return MIN_KEY_HEIGHT
+	return max(MIN_KEY_HEIGHT, view_height / float(key_count))
+
+func get_keyboard_width() -> float:
+	return keyboard_width
 
 func _on_playhead_drag_started() -> void:
 	is_playing = false

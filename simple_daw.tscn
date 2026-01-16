@@ -114,10 +114,16 @@ size_flags_vertical = 3
 custom_minimum_size = Vector2(16, 0)
 size_flags_vertical = 3
 
-[node name="HScroll" type="HScrollBar" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
+[node name="HScrollRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
 custom_minimum_size = Vector2(0, 16)
 size_flags_horizontal = 3
 
+[node name="HScrollSpacer" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow"]
+custom_minimum_size = Vector2(80, 0)
+
+[node name="HScroll" type="HScrollBar" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow"]
+size_flags_horizontal = 3
+
 [connection signal="pressed" from="RootLayout/TopBar/TopBarContent/BrowserToggle" to="." method="_on_browser_toggle_pressed"]
-[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScroll" to="." method="_on_h_scroll_changed"]
-[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/VScroll" to="." method="_on_v_scroll_changed"]
+[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScroll" to="." method="_on_h_scroll_changed"]
+[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/VScroll" to="." method="_on_v_scroll_changed"]\n

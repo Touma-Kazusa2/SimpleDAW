@@ -3,7 +3,8 @@ extends Control
 @onready var browser_panel: Control = $"RootLayout/MainSplit/BrowserPanel"
 @onready var browser_toggle: Button = $"RootLayout/TopBar/TopBarContent/BrowserToggle"
 @onready var piano_roll: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/PianoRoll"
-@onready var h_scroll: HScrollBar = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScroll"
+@onready var h_scroll_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollSpacer"
+@onready var h_scroll: HScrollBar = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScroll"
 @onready var v_scroll: VScrollBar = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/VScroll"
 
 var updating_scrollbars := false
@@ -59,6 +60,11 @@ func _update_scrollbars(
 	view_height: float
 ) -> void:
 	updating_scrollbars = true
+	var keyboard_width = 0.0
+	if piano_roll != null and piano_roll.has_method("get_keyboard_width"):
+		keyboard_width = float(piano_roll.call("get_keyboard_width"))
+	if h_scroll_spacer != null:
+		h_scroll_spacer.custom_minimum_size = Vector2(max(0.0, keyboard_width), 0)
 	h_scroll.min_value = 0.0
 	h_scroll.max_value = max_x
 	h_scroll.page = view_width
