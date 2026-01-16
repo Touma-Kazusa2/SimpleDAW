@@ -8,12 +8,19 @@ extends Control
 @onready var v_scroll: VScrollBar = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/VScroll"
 
 var updating_scrollbars := false
+var _scroll_sync_cooldown := 0.0
 
 func _ready() -> void:
 	_update_browser_toggle_label()
 	if piano_roll and piano_roll.has_signal("scroll_changed"):
 		piano_roll.connect("scroll_changed", Callable(self, "_on_roll_scroll_changed"))
 	_sync_scrollbars()
+
+func _process(delta: float) -> void:
+	_scroll_sync_cooldown -= delta
+	if _scroll_sync_cooldown <= 0.0:
+		_scroll_sync_cooldown = 0.2
+		_sync_scrollbars()
 
 func _on_browser_toggle_pressed() -> void:
 	browser_panel.visible = not browser_panel.visible
