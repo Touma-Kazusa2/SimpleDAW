@@ -1,5 +1,7 @@
 extends Control
 
+signal scroll_changed(scroll_x: float, scroll_y: float, max_x: float, max_y: float, view_width: float, view_height: float)
+
 const DEBUG_LOGS := false
 
 @export var bpm: float = 120.0
@@ -27,6 +29,7 @@ var scroll_x: float = 0.0
 var scroll_y: float = 0.0
 var velocity_mode: bool = false
 var last_view_width: float = 0.0
+var last_view_height: float = 0.0
 var last_content_height: float = 0.0
 var shift_modifier_active: bool = false
 
@@ -219,6 +222,28 @@ func _set_scroll_x(value: float) -> void:
 func _set_scroll_y(value: float) -> void:
 	_set_scroll_position(scroll_x, value)
 
+func set_scroll_x(value: float) -> void:
+	_set_scroll_x(value)
+
+func set_scroll_y(value: float) -> void:
+	_set_scroll_y(value)
+
+func get_scroll_x() -> float:
+	return scroll_x
+
+func get_scroll_y() -> float:
+	return scroll_y
+
+func get_max_scroll_x() -> float:
+	if roll_content == null or roll_panel == null:
+		return 0.0
+	return max(0.0, roll_content.size.x - roll_panel.size.x)
+
+func get_max_scroll_y() -> float:
+	if roll_content == null or roll_panel == null:
+		return 0.0
+	return max(0.0, roll_content.size.y - roll_panel.size.y)
+
 func _set_scroll_position(next_x: float, next_y: float) -> void:
 	if roll_content == null or roll_panel == null:
 		return
@@ -228,6 +253,7 @@ func _set_scroll_position(next_x: float, next_y: float) -> void:
 	scroll_y = clamp(next_y, 0.0, max_y)
 	roll_content.position = Vector2(-scroll_x, -scroll_y)
 	_sync_viewport()
+	_emit_scroll_changed()
 
 func _update_layout() -> void:
 	if roll_panel == null or piano_keyboard == null:
@@ -255,9 +281,13 @@ func _sync_viewport() -> void:
 	if roll_panel == null or notes_view == null:
 		return
 	var view_width = roll_panel.size.x
+	var view_height = roll_panel.size.y
 	var needs_redraw = false
 	if view_width != last_view_width:
 		last_view_width = view_width
+		needs_redraw = true
+	if view_height != last_view_height:
+		last_view_height = view_height
 		needs_redraw = true
 	if notes_view.view_scroll_x != scroll_x:
 		notes_view.view_scroll_x = scroll_x
@@ -268,6 +298,14 @@ func _sync_viewport() -> void:
 		piano_keyboard.queue_redraw()
 	if needs_redraw:
 		notes_view.queue_redraw()
+		_emit_scroll_changed()
+
+func _emit_scroll_changed() -> void:
+	if roll_content == null or roll_panel == null:
+		return
+	var max_x = max(0.0, roll_content.size.x - roll_panel.size.x)
+	var max_y = max(0.0, roll_content.size.y - roll_panel.size.y)
+	emit_signal("scroll_changed", scroll_x, scroll_y, max_x, max_y, roll_panel.size.x, roll_panel.size.y)
 
 func _on_playhead_drag_started() -> void:
 	is_playing = false
