@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="PackedScene" path="res://main.tscn" id="1_pianoroll"]
+[ext_resource type="Script" path="res://scripts/simple_daw.gd" id="2_simple_daw"]
 
 [node name="SimpleDAW" type="Control"]
 layout_mode = 3
@@ -9,6 +10,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("2_simple_daw")
 
 [node name="MainSplit" type="HSplitContainer" parent="."]
 layout_mode = 1
@@ -41,16 +43,23 @@ size_flags_vertical = 3
 custom_minimum_size = Vector2(0, 120)
 size_flags_horizontal = 3
 
-[node name="TransportLabel" type="Label" parent="MainSplit/RightSplit/TransportPanel"]
+[node name="TransportBar" type="HBoxContainer" parent="MainSplit/RightSplit/TransportPanel"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="TransportLabel" type="Label" parent="MainSplit/RightSplit/TransportPanel/TransportBar"]
+size_flags_horizontal = 3
 text = "Transport"
-horizontal_alignment = 1
-vertical_alignment = 1
+
+[node name="BrowserToggle" type="Button" parent="MainSplit/RightSplit/TransportPanel/TransportBar"]
+custom_minimum_size = Vector2(160, 40)
+text = "隐藏浏览器"
+
+[connection signal="pressed" from="MainSplit/RightSplit/TransportPanel/TransportBar/BrowserToggle" to="." method="_on_browser_toggle_pressed"]
 
 [node name="PianoRollPanel" type="PanelContainer" parent="MainSplit/RightSplit"]
 size_flags_horizontal = 3

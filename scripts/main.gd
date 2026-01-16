@@ -1,5 +1,7 @@
 extends Control
 
+const DEBUG_LOGS := false
+
 @export var bpm: float = 120.0
 @export var pixels_per_beat: float = 120.0
 @export var key_height: float = 16.0
@@ -159,9 +161,11 @@ func _input(event: InputEvent) -> void:
 					input_controller.cycle_snap_step()
 				var step = input_controller.get_snap_step()
 				var label = "free" if step <= 0.0 else str(step)
-				print("Snap on:", label)
+				if DEBUG_LOGS:
+					print("Snap on:", label)
 			else:
-				print("Snap off")
+				if DEBUG_LOGS:
+					print("Snap off")
 		elif event.pressed and event.keycode == KEY_K:
 			visible_beats += beats_per_measure * 4
 			_apply_config()
@@ -241,7 +245,8 @@ func _on_resized() -> void:
 func _print_scroll_state(source: String) -> void:
 	var max_x = max(0.0, roll_content.size.x - roll_panel.size.x)
 	var max_y = max(0.0, roll_content.size.y - roll_panel.size.y)
-	print("Scroll(", source, "): x=", scroll_x, "/", max_x, " y=", scroll_y, "/", max_y)
+	if DEBUG_LOGS:
+		print("Scroll(", source, "): x=", scroll_x, "/", max_x, " y=", scroll_y, "/", max_y)
 
 func _restore_scroll_from_anchor(content_x: float, mouse_local_x: float) -> void:
 	_set_scroll_x(content_x - mouse_local_x)

@@ -1,5 +1,7 @@
 extends Node
 
+const DEBUG_LOGS := false
+
 signal debug_click(local_pos: Vector2)
 signal playhead_drag_started
 signal playhead_time_changed(time_beats: float)
@@ -57,7 +59,8 @@ func _on_roll_gui_input(event: InputEvent) -> void:
 			var local_pos = event.position
 			if debug_enabled:
 				emit_signal("debug_click", local_pos)
-				print("InputController: click local_pos=", local_pos)
+				if DEBUG_LOGS:
+					print("InputController: click local_pos=", local_pos)
 			if velocity_mode:
 				if _try_begin_velocity_drag(local_pos):
 					roll_content.accept_event()
@@ -74,7 +77,8 @@ func _on_roll_gui_input(event: InputEvent) -> void:
 			if is_dragging_velocity:
 				if drag_velocity_index >= 0 and drag_velocity_index < model.notes.size():
 					var velocity = int(model.notes[drag_velocity_index].get("velocity", 127))
-					print("Velocity:", velocity)
+					if DEBUG_LOGS:
+						print("Velocity:", velocity)
 				is_dragging_velocity = false
 				drag_velocity_index = -1
 			if is_dragging_note or is_dragging_playhead:
