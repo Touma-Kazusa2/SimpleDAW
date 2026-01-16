@@ -1,5 +1,7 @@
 extends Control
 
+const NotePalette = preload("res://scripts/note_palette.gd")
+
 @export var key_height: float = 16.0
 @export var min_pitch: int = 36
 @export var max_pitch: int = 96
@@ -66,15 +68,17 @@ func _draw() -> void:
 func _get_noise_texture() -> Texture2D:
 	if noise_texture and noise_texture.get_width() == noise_size:
 		return noise_texture
-	if noise_texture_path != "" and ResourceLoader.exists(noise_texture_path):
-		noise_texture = load(noise_texture_path)
-		return noise_texture
+	if noise_texture_path != "" and FileAccess.file_exists(noise_texture_path):
+		var file_image = Image.new()
+		if file_image.load(noise_texture_path) == OK:
+			noise_texture = ImageTexture.create_from_image(file_image)
+			return noise_texture
 	if noise_size <= 0:
 		return null
-	var image = Image.create(noise_size, noise_size, false, Image.FORMAT_RGBA8)
+	var noise_image = Image.create(noise_size, noise_size, false, Image.FORMAT_RGBA8)
 	for y in range(noise_size):
 		for x in range(noise_size):
 			var v = 0.45 + randf() * 0.1
-			image.set_pixel(x, y, Color(v, v, v, 1.0))
-	noise_texture = ImageTexture.create_from_image(image)
+			noise_image.set_pixel(x, y, Color(v, v, v, 1.0))
+	noise_texture = ImageTexture.create_from_image(noise_image)
 	return noise_texture
