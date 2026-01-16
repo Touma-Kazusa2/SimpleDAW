@@ -102,6 +102,17 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
+[node name="TabRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
+custom_minimum_size = Vector2(0, 28)
+size_flags_horizontal = 3
+
+[node name="RollTabs" type="TabBar" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow"]
+size_flags_horizontal = 3
+
+[node name="AddTabButton" type="Button" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow"]
+custom_minimum_size = Vector2(32, 24)
+text = "+"
+
 [node name="HScrollRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
 custom_minimum_size = Vector2(0, 16)
 size_flags_horizontal = 3
@@ -116,7 +127,15 @@ size_flags_horizontal = 3
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="PianoRoll" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow" instance=ExtResource("1_pianoroll")]
+[node name="RollStack" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Roll1" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/RollStack" instance=ExtResource("1_pianoroll")]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Roll2" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/RollStack" instance=ExtResource("1_pianoroll")]
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
@@ -125,5 +144,7 @@ custom_minimum_size = Vector2(16, 0)
 size_flags_vertical = 3
 
 [connection signal="pressed" from="RootLayout/TopBar/TopBarContent/BrowserToggle" to="." method="_on_browser_toggle_pressed"]
+[connection signal="tab_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow/RollTabs" to="." method="_on_tab_changed"]
+[connection signal="pressed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow/AddTabButton" to="." method="_on_add_tab_pressed"]
 [connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScroll" to="." method="_on_h_scroll_changed"]
 [connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollRow/VScroll" to="." method="_on_v_scroll_changed"]
