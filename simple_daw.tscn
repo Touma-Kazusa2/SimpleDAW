@@ -1,10 +1,11 @@
-[gd_scene load_steps=15 format=3 uid="uid://dekhk22v688yc"]
+[gd_scene load_steps=16 format=3 uid="uid://dekhk22v688yc"]
 
 [ext_resource type="PackedScene" uid="uid://drjc5r8avo8up" path="res://piano_roll.tscn" id="1_pianoroll"]
 [ext_resource type="Script" uid="uid://cytpii3o37did" path="res://scripts/simple_daw.gd" id="2_simple_daw"]
 [ext_resource type="Script" uid="uid://kvy5pagfy4cu" path="res://scripts/custom_scrollbar.gd" id="3_custom_scrollbar"]
 [ext_resource type="Script" uid="uid://22283bxyyskv" path="res://scripts/envelope_drag_bar.gd" id="4_envelope_drag_bar"]
 [ext_resource type="Script" uid="uid://cbanr2patqo0k" path="res://scripts/envelope_lane.gd" id="5_envelope_lane"]
+[ext_resource type="Script" uid="uid://afgqodr12wueh" path="res://scripts/overlay_frame.gd" id="16_overlay_frame"]
 [ext_resource type="Texture2D" uid="uid://c4a8m7k66wliu" path="res://Lucid V1.2/PNG/Flat/16/Folder-Music.png" id="6_browser_icon"]
 [ext_resource type="Texture2D" uid="uid://di48c8q0cxsvx" path="res://Lucid V1.2/PNG/Flat/16/Play.png" id="7_play_icon"]
 [ext_resource type="Texture2D" uid="uid://bmcwnpqih3jwv" path="res://Lucid V1.2/PNG/Flat/16/Pause.png" id="8_pause_icon"]
@@ -15,29 +16,12 @@
 [ext_resource type="Texture2D" path="res://Lucid V1.2/PNG/Flat/16/Signal-2.png" id="14_curve_bezier"]
 [ext_resource type="Texture2D" uid="uid://cr27rx6fef403" path="res://Lucid V1.2/PNG/Flat/16/Chevron-Arrow-Up.png" id="15_panel_open"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_Clear"]
 bg_color = Color(0.0, 0.0, 0.0, 0.0)
-border_color = Color(0.95, 0.55, 0.2, 0.95)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2"]
-bg_color = Color(0.0, 0.0, 0.0, 0.0)
-border_color = Color(0.95, 0.55, 0.2, 0.95)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
+border_width_left = 0
+border_width_top = 0
+border_width_right = 0
+border_width_bottom = 0
 
 [node name="SimpleDAW" type="Control"]
 layout_mode = 3
@@ -49,17 +33,17 @@ grow_vertical = 2
 script = ExtResource("2_simple_daw")
 
 [node name="RootLayout" type="VBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-offset_left = 10.0
-offset_top = 10.0
-offset_right = -10.0
-offset_bottom = -10.0
-clip_contents = true
+  layout_mode = 1
+  anchors_preset = 15
+  anchor_right = 1.0
+  anchor_bottom = 1.0
+  grow_horizontal = 2
+  grow_vertical = 2
+  offset_left = 13.0
+  offset_top = 13.0
+  offset_right = -13.0
+  offset_bottom = -13.0
+  clip_contents = false
 
 [node name="TopBar" type="PanelContainer" parent="RootLayout"]
 custom_minimum_size = Vector2(0, 52)
@@ -143,7 +127,8 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 
 [node name="RollArea" type="VBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel"]
-layout_mode = 2
+  layout_mode = 2
+  theme_override_constants/separation = 6
 
 [node name="TabRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
 custom_minimum_size = Vector2(0, 28)
@@ -169,15 +154,24 @@ custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 
 [node name="HScrollFrame" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_2")
-clip_contents = true
+  layout_mode = 2
+  size_flags_horizontal = 3
+  theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+  clip_contents = false
 
-[node name="HScroll" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollFrame"]
-layout_mode = 2
-size_flags_horizontal = 3
-script = ExtResource("3_custom_scrollbar")
+  [node name="HScroll" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollFrame"]
+  layout_mode = 2
+  size_flags_horizontal = 3
+  script = ExtResource("3_custom_scrollbar")
+
+[node name="HScrollOverlay" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollFrame"]
+  layout_mode = 1
+  anchors_preset = 15
+  anchor_right = 1.0
+  anchor_bottom = 1.0
+  script = ExtResource("16_overlay_frame")
+  border_width = 2.0
+  border_expand = 2.0
 
 [node name="EnvelopeLaneRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
 layout_mode = 2
@@ -188,16 +182,25 @@ custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 
 [node name="EnvelopeLaneFrame" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_1")
-clip_contents = true
+  layout_mode = 2
+  size_flags_horizontal = 3
+  theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+  clip_contents = false
 
-[node name="EnvelopeLane" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame"]
-clip_contents = true
-layout_mode = 2
-size_flags_horizontal = 3
-script = ExtResource("5_envelope_lane")
+  [node name="EnvelopeLane" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame"]
+  clip_contents = true
+  layout_mode = 2
+  size_flags_horizontal = 3
+  script = ExtResource("5_envelope_lane")
+
+[node name="EnvelopeLaneOverlay" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame"]
+  layout_mode = 1
+  anchors_preset = 15
+  anchor_right = 1.0
+  anchor_bottom = 1.0
+  script = ExtResource("16_overlay_frame")
+  border_width = 3.0
+  border_expand = 3.0
 
 [node name="EnvelopeLaneRightSpacer" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow"]
 layout_mode = 2
@@ -218,53 +221,79 @@ custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 
 [node name="EnvelopeBarFrame" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_2")
-clip_contents = true
+  layout_mode = 2
+  size_flags_horizontal = 3
+  theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+  clip_contents = false
 
-[node name="EnvelopeDragBar" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame"]
-clip_contents = true
-custom_minimum_size = Vector2(0, 18)
-layout_mode = 2
-size_flags_horizontal = 3
-script = ExtResource("4_envelope_drag_bar")
+  [node name="EnvelopeDragBar" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame"]
+  clip_contents = true
+  custom_minimum_size = Vector2(0, 18)
+  layout_mode = 2
+  size_flags_horizontal = 3
+  script = ExtResource("4_envelope_drag_bar")
+
+[node name="EnvelopeBarOverlay" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame"]
+  layout_mode = 1
+  anchors_preset = 15
+  anchor_right = 1.0
+  anchor_bottom = 1.0
+  script = ExtResource("16_overlay_frame")
+  border_width = 2.0
+  border_expand = 2.0
 
 [node name="EnvelopeBarRightSpacer" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow"]
 layout_mode = 2
 
 [node name="RollFrame" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-theme_override_styles/panel = SubResource("StyleBoxFlat_1")
+  layout_mode = 2
+  size_flags_horizontal = 3
+  size_flags_vertical = 3
+  theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
 
-[node name="RollRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
+[node name="RollClip" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame"]
+  layout_mode = 1
+  anchors_preset = 15
+  anchor_right = 1.0
+  anchor_bottom = 1.0
+  clip_contents = true
 
-[node name="RollStack" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollRow"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
+  [node name="RollRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip"]
+  layout_mode = 1
+  anchors_preset = 15
+  anchor_right = 1.0
+  anchor_bottom = 1.0
 
-[node name="Roll1" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollRow/RollStack" instance=ExtResource("1_pianoroll")]
-layout_mode = 1
-size_flags_horizontal = 3
-size_flags_vertical = 3
+[node name="RollFrameOverlay" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame"]
+  layout_mode = 1
+  anchors_preset = 15
+  anchor_right = 1.0
+  anchor_bottom = 1.0
+  script = ExtResource("16_overlay_frame")
+  border_width = 3.0
+  border_expand = 3.0
 
-[node name="Roll2" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollRow/RollStack" instance=ExtResource("1_pianoroll")]
-layout_mode = 1
-size_flags_horizontal = 3
-size_flags_vertical = 3
+[node name="RollStack" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow"]
+  layout_mode = 2
+  size_flags_horizontal = 3
+  size_flags_vertical = 3
 
-[node name="VScroll" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollRow"]
-custom_minimum_size = Vector2(20, 0)
-layout_mode = 2
-size_flags_vertical = 3
-script = ExtResource("3_custom_scrollbar")
-vertical = true
+[node name="Roll1" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow/RollStack" instance=ExtResource("1_pianoroll")]
+  layout_mode = 1
+  size_flags_horizontal = 3
+  size_flags_vertical = 3
+
+[node name="Roll2" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow/RollStack" instance=ExtResource("1_pianoroll")]
+  layout_mode = 1
+  size_flags_horizontal = 3
+  size_flags_vertical = 3
+
+[node name="VScroll" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow"]
+  custom_minimum_size = Vector2(20, 0)
+  layout_mode = 2
+  size_flags_vertical = 3
+  script = ExtResource("3_custom_scrollbar")
+  vertical = true
 
 [connection signal="pressed" from="RootLayout/TopBar/TopBarContent/BrowserToggle" to="." method="_on_browser_toggle_pressed"]
 [connection signal="pressed" from="RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar/SelectionSnapButton" to="." method="_on_selection_snap_pressed"]
@@ -275,4 +304,4 @@ vertical = true
 [connection signal="panel_toggled" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame/EnvelopeDragBar" to="." method="_on_envelope_panel_toggled"]
 [connection signal="selection_cleared" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame/EnvelopeDragBar" to="." method="_on_envelope_selection_cleared"]
 [connection signal="selection_committed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame/EnvelopeDragBar" to="." method="_on_envelope_selection_committed"]
-[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollRow/VScroll" to="." method="_on_v_scroll_changed"]
+[connection signal="value_changed" from="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow/VScroll" to="." method="_on_v_scroll_changed"]

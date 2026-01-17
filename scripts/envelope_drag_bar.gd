@@ -3,12 +3,13 @@ extends Control
 signal selection_committed(start_beats: float, end_beats: float)
 signal selection_cleared
 signal panel_toggled(is_open: bool)
+signal panel_height_changed(height: float)
 
-@export var min_panel_height: float = 90.0
 @export var snap_threshold: float = 12.0
 @export var drag_threshold: float = 6.0
 @export var snap_step_beats: float = 1.0
 @export var snap_enabled: bool = true
+@export var max_panel_height: float = -1.0
 
 var panel: Control = null
 var panel_height: float = 0.0
@@ -100,9 +101,12 @@ func _update_vertical_drag(local_pos: Vector2) -> void:
 	var delta_y = local_pos.y - _drag_start_pos.y
 	_last_vertical_delta = delta_y
 	var next_height = max(0.0, _drag_start_height + delta_y)
+	if max_panel_height > 0.0:
+		next_height = min(next_height, max_panel_height)
 	panel.custom_minimum_size.y = next_height
 	panel.visible = next_height > 0.0
 	panel_height = next_height
+	emit_signal("panel_height_changed", panel_height)
 	if panel.get_parent() is Control:
 		(panel.get_parent() as Control).queue_redraw()
 
@@ -128,6 +132,8 @@ func _finalize_drag(pos: Vector2) -> void:
 func _finalize_vertical() -> void:
 	if panel == null:
 		return
+	if max_panel_height > 0.0:
+		panel_height = min(panel_height, max_panel_height)
 	if abs(_last_vertical_delta) < drag_threshold:
 		if _panel_was_open:
 			panel_height = _drag_start_height
@@ -135,23 +141,22 @@ func _finalize_vertical() -> void:
 			panel.visible = panel_height > 0.0
 		return
 	if _panel_was_open:
-		if panel_height < min_panel_height:
+		if panel_height <= snap_threshold:
 			panel_height = 0.0
 			panel.custom_minimum_size.y = 0.0
 			panel.visible = false
 		else:
-			if panel_height <= min_panel_height + snap_threshold:
-				panel_height = min_panel_height
 			panel.custom_minimum_size.y = panel_height
 			panel.visible = true
 	else:
-		if panel_height > 0.0 and panel_height < min_panel_height:
-			panel_height = min_panel_height
+		if max_panel_height > 0.0:
+			panel_height = min(panel_height, max_panel_height)
 		panel.custom_minimum_size.y = panel_height
 		panel.visible = panel_height > 0.0
 	if panel.get_parent() is Control:
 		(panel.get_parent() as Control).queue_redraw()
 	emit_signal("panel_toggled", panel_height > 0.0)
+	emit_signal("panel_height_changed", panel_height)
 
 func toggle_panel() -> bool:
 	var next_open = not is_panel_open()
@@ -162,7 +167,8 @@ func set_panel_open(open: bool) -> void:
 	if panel == null:
 		return
 	if open:
-		panel_height = max(min_panel_height, panel_height)
+		if max_panel_height > 0.0:
+			panel_height = min(panel_height, max_panel_height)
 		panel.custom_minimum_size.y = panel_height
 		panel.visible = true
 	else:
@@ -172,6 +178,7 @@ func set_panel_open(open: bool) -> void:
 	if panel.get_parent() is Control:
 		(panel.get_parent() as Control).queue_redraw()
 	emit_signal("panel_toggled", panel_height > 0.0)
+	emit_signal("panel_height_changed", panel_height)
 
 func is_panel_open() -> bool:
 	return panel_height > 0.0

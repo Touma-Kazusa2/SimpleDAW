@@ -13,8 +13,8 @@ extends Control
 
 const COLOR_BG = Color(0.08, 0.08, 0.09)
 const COLOR_GRID = Color(0.2, 0.2, 0.22)
-const COLOR_MEASURE = Color(0.35, 0.35, 0.38)
-const COLOR_OCTAVE = Color(0.28, 0.28, 0.3)
+const COLOR_MEASURE = Color(0.6, 0.6, 0.63)
+const COLOR_OCTAVE = Color(0.62, 0.62, 0.66)
 
 func _draw() -> void:
 	var total_width = visible_beats * pixels_per_beat
@@ -50,5 +50,5 @@ func _draw() -> void:
 	for i in range(key_start, key_end + 1):
 		var y = i * key_height
 		var pitch = max_pitch - i
-		var color = COLOR_OCTAVE if pitch % 12 == 0 else COLOR_GRID
+		var color = COLOR_OCTAVE if pitch % 12 == 11 else COLOR_GRID
 		draw_line(Vector2(draw_x0, y), Vector2(draw_x1, y), color, 1.0)

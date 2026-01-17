@@ -10,16 +10,21 @@ const ICON_CURVE_BEZIER = preload("res://Lucid V1.2/PNG/Flat/16/Signal-2.png")
 @onready var browser_toggle: Button = $"RootLayout/TopBar/TopBarContent/BrowserToggle"
 @onready var tab_bar: TabBar = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow/RollTabs"
 @onready var add_tab_button: Button = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow/AddTabButton"
-@onready var roll_stack: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollRow/RollStack"
+@onready var roll_area: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"
+@onready var tab_row: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow"
+@onready var h_scroll_row: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow"
+@onready var envelope_bar_row: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow"
+@onready var roll_stack: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow/RollStack"
 @onready var h_scroll_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollSpacer"
 @onready var h_scroll: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollFrame/HScroll"
-@onready var v_scroll: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollRow/VScroll"
+@onready var v_scroll: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow/VScroll"
 @onready var selection_snap_button: Button = $"RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar/SelectionSnapButton"
 @onready var envelope_bar_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarSpacer"
 @onready var envelope_lane_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneSpacer"
-@onready var envelope_lane_frame: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame"
 @onready var envelope_drag_bar: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame/EnvelopeDragBar"
 @onready var envelope_lane: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame/EnvelopeLane"
+@onready var envelope_lane_overlay: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame/EnvelopeLaneOverlay"
+@onready var roll_frame_overlay: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollFrameOverlay"
 @onready var envelope_bar_right_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarRightSpacer"
 @onready var envelope_lane_right_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneRightSpacer"
 @onready var curve_mode_button: Button = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneRightSpacer/CurveModeButton"
@@ -37,6 +42,7 @@ func _ready() -> void:
 	_init_envelope_lane()
 	_update_selection_snap_label()
 	_update_curve_mode_label()
+	_update_envelope_panel_limit()
 
 func _on_browser_toggle_pressed() -> void:
 	browser_panel.visible = not browser_panel.visible
@@ -156,6 +162,7 @@ func _sync_scrollbars() -> void:
 	var max_y = float(piano_roll.call("get_max_scroll_y"))
 	_update_scrollbars(scroll_x, scroll_y, max_x, max_y, view_width, view_height)
 	_update_envelope_view(scroll_x, view_width)
+	_update_envelope_panel_limit()
 
 func _update_scrollbars(
 	scroll_x: float,
@@ -211,16 +218,40 @@ func _on_notes_changed() -> void:
 
 func _on_roll_panel_resized() -> void:
 	_sync_scrollbars()
+	_update_envelope_panel_limit()
 
 func _init_envelope_lane() -> void:
 	if envelope_drag_bar != null and envelope_drag_bar.has_method("setup"):
 		envelope_drag_bar.call("setup", envelope_lane)
+	if envelope_drag_bar != null and envelope_drag_bar.has_signal("panel_height_changed"):
+		var height_callable = Callable(self, "_on_envelope_panel_height_changed")
+		if not envelope_drag_bar.is_connected("panel_height_changed", height_callable):
+			envelope_drag_bar.connect("panel_height_changed", height_callable)
 	if envelope_lane != null:
 		if envelope_lane.has_method("set_snap_provider"):
 			envelope_lane.call("set_snap_provider", envelope_drag_bar)
 		envelope_lane.visible = false
 		envelope_lane.custom_minimum_size = Vector2(0.0, 0.0)
 	_set_envelope_panel_controls(false)
+	_update_envelope_panel_limit()
+
+func _update_envelope_panel_limit() -> void:
+	if envelope_drag_bar == null:
+		return
+	if roll_area == null or tab_row == null or h_scroll_row == null or envelope_bar_row == null:
+		return
+	var total_height = roll_area.size.y
+	var reserved = tab_row.size.y + h_scroll_row.size.y + envelope_bar_row.size.y
+	var separation = 0.0
+	if roll_area is VBoxContainer:
+		separation = float((roll_area as VBoxContainer).get_theme_constant("separation"))
+	var row_count = 5.0
+	var spacing = separation * max(0.0, row_count - 1.0)
+	var roll_allowance = 0.0
+	if roll_frame_overlay != null:
+		roll_allowance = float(roll_frame_overlay.get("border_expand")) * 2.0
+	var max_height = max(0.0, total_height - reserved - spacing - roll_allowance)
+	envelope_drag_bar.set("max_panel_height", max_height)
 
 func _update_envelope_view(scroll_x: float, view_width: float) -> void:
 	if envelope_lane == null or envelope_drag_bar == null or piano_roll == null:
@@ -255,6 +286,10 @@ func _on_selection_snap_pressed() -> void:
 func _on_envelope_panel_toggled(is_open: bool) -> void:
 	_set_envelope_panel_controls(is_open)
 
+func _on_envelope_panel_height_changed(height: float) -> void:
+	if envelope_lane_overlay != null:
+		envelope_lane_overlay.visible = height > 0.0
+
 func _update_selection_snap_label(force_enabled: Variant = null) -> void:
 	if selection_snap_button == null:
 		return
@@ -284,8 +319,8 @@ func _update_curve_mode_label(force_mode: String = "") -> void:
 func _set_envelope_panel_controls(is_open: bool) -> void:
 	if curve_mode_button != null:
 		curve_mode_button.visible = is_open
-	if envelope_lane_frame != null:
-		envelope_lane_frame.visible = is_open
+	if envelope_lane_overlay != null:
+		envelope_lane_overlay.visible = is_open
 
 func _store_envelope_selection(start_beats: float, end_beats: float) -> void:
 	if piano_roll == null:

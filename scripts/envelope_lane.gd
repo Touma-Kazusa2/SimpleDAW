@@ -9,7 +9,7 @@ extends Control
 const COLOR_BG = Color(0.06, 0.06, 0.07)
 const COLOR_GRID = Color(1.0, 1.0, 1.0, 0.08)
 const COLOR_MEASURE = Color(1.0, 1.0, 1.0, 0.18)
-const COLOR_DEFAULT = Color(0.95, 0.55, 0.2, 0.8)
+const COLOR_DEFAULT = Color(0.95, 0.55, 0.2, 0.23)
 const COLOR_CURVE = Color(0.95, 0.55, 0.2, 0.9)
 const COLOR_POINT = Color(0.98, 0.82, 0.25, 1.0)
 
@@ -20,6 +20,7 @@ var is_drawing := false
 var is_deleting := false
 var last_draw_time := -1.0
 var last_draw_value := 0.0
+var last_delete_time := -1.0
 var curve_mode: String = "line"
 
 const DEFAULT_VALUE := 0.5
@@ -116,9 +117,16 @@ func _draw_curve() -> void:
 	if view_width > 0.0:
 		clip_width = min(size.x, view_width)
 	var offset_x = -view_scroll_x
+	var default_value = DEFAULT_VALUE
+	if model.has_method("get_current_default_value"):
+		default_value = float(model.call("get_current_default_value"))
+	var default_y = (1.0 - clamp(default_value, 0.0, 1.0)) * size.y
 	var prev_pos: Vector2 = Vector2.ZERO
 	var has_prev = false
 	var view_positions: Array = []
+	var first_x := 0.0
+	var last_x := 0.0
+	var has_any := false
 	for entry in points:
 		var time_beats = float(entry.get("time", 0.0))
 		var value = float(entry.get("value", DEFAULT_VALUE))
@@ -126,6 +134,30 @@ func _draw_curve() -> void:
 		var y = (1.0 - clamp(value, 0.0, 1.0)) * size.y
 		var pos = Vector2(x, y)
 		view_positions.append(pos)
+		if not has_any:
+			first_x = x
+			last_x = x
+			has_any = true
+		else:
+			first_x = min(first_x, x)
+			last_x = max(last_x, x)
+	if has_any:
+		if first_x > clip_width or last_x < 0.0:
+			draw_line(Vector2(0.0, default_y), Vector2(clip_width, default_y), COLOR_DEFAULT, 2.0)
+		else:
+			var left_end = clamp(first_x, 0.0, clip_width)
+			if left_end > 0.0:
+				draw_line(Vector2(0.0, default_y), Vector2(left_end, default_y), COLOR_DEFAULT, 2.0)
+			var right_start = clamp(last_x, 0.0, clip_width)
+			if right_start < clip_width:
+				draw_line(Vector2(right_start, default_y), Vector2(clip_width, default_y), COLOR_DEFAULT, 2.0)
+		if view_positions.size() >= 1:
+			var first_pos = view_positions[0] as Vector2
+			if first_pos.x >= -POINT_RADIUS and first_pos.x <= clip_width + POINT_RADIUS:
+				draw_line(Vector2(first_pos.x, first_pos.y), Vector2(first_pos.x, default_y), COLOR_DEFAULT, 2.0)
+			var last_pos = view_positions[view_positions.size() - 1] as Vector2
+			if last_pos.x >= -POINT_RADIUS and last_pos.x <= clip_width + POINT_RADIUS:
+				draw_line(Vector2(last_pos.x, last_pos.y), Vector2(last_pos.x, default_y), COLOR_DEFAULT, 2.0)
 	if curve_mode == "bezier" and view_positions.size() >= 2:
 		_draw_bezier_curve(view_positions, clip_width)
 	else:
@@ -162,9 +194,11 @@ func _gui_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			if event.pressed:
 				is_deleting = true
+				last_delete_time = -1.0
 				_delete_at(event.position)
 			else:
 				is_deleting = false
+				last_delete_time = -1.0
 			accept_event()
 	elif event is InputEventMouseMotion:
 		if is_drawing:
@@ -208,7 +242,21 @@ func _delete_at(local_pos: Vector2) -> void:
 	var step = max(0.0, _get_step_beats())
 	var snapped_time = _snap_time(time, step)
 	var tolerance = max(delete_tolerance_beats, step * 0.45)
-	model.call("remove_points_near", snapped_time, tolerance)
+	if last_delete_time < 0.0 or step <= 0.0:
+		model.call("remove_points_near", snapped_time, tolerance)
+		last_delete_time = snapped_time
+		return
+	if is_equal_approx(snapped_time, last_delete_time):
+		return
+	var delta = snapped_time - last_delete_time
+	var step_dir = step if delta >= 0.0 else -step
+	if step_dir == 0.0:
+		return
+	var t = last_delete_time + step_dir
+	while (step_dir > 0.0 and t <= snapped_time) or (step_dir < 0.0 and t >= snapped_time):
+		model.call("remove_points_near", t, tolerance)
+		t += step_dir
+	last_delete_time = snapped_time
 
 func _time_from_pos(local_x: float) -> float:
 	if pixels_per_beat <= 0.0:
