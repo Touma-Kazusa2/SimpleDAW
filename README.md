@@ -17,7 +17,7 @@ Lightweight, beginner-friendly DAW built on a piano roll foundation. Focused on 
 - L: toggle velocity edit mode (drag velocity bar)
 
 ## Files
-- `main.tscn`: Scene layout and node tree
+- `piano_roll.tscn`: Piano roll scene layout and node tree
 - `project.godot`: Godot project settings
 - `assets/blue_noise_128.png`: Blue noise texture used for UI grain
 - `scripts/main.gd`: Global parameters, layout, scrolling, zoom, play/pause, input wiring
@@ -31,6 +31,8 @@ Lightweight, beginner-friendly DAW built on a piano roll foundation. Focused on 
 - `scripts/input_debug_overlay.gd`: Optional input debug overlay
 
 ## Notes
-- Velocity is stored as 0–127.
+- Velocity is stored as 0-127.
 - Snap is off by default; toggle with G.
-- Vertical scrolling appears once key height makes content taller than the view.\n
+- Notes that extend past the current length will automatically add 4 measures.
+- Vertical scrolling appears once key height makes content taller than the view.
+- Note creation snaps to whole beats by design (even with snap off).

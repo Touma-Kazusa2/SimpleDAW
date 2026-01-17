@@ -7,7 +7,9 @@ extends Control
 @export var beats_per_measure: int = 4
 @export var visible_beats: int = 32
 @export var view_scroll_x: float = 0.0
+@export var view_scroll_y: float = 0.0
 @export var view_width: float = 0.0
+@export var view_height: float = 0.0
 @export var playhead_time_beats: float = 0.0
 @export var active_note_scale: float = 1.6
 @export var active_note_attack_beats: float = 0.35
@@ -32,7 +34,9 @@ const MIN_LABEL_KEY_HEIGHT := 12.0
 
 func set_model(notes_model: Node) -> void:
 	if model:
-		model.disconnect("changed", Callable(self, "_on_model_changed"))
+		var callable = Callable(self, "_on_model_changed")
+		if model.is_connected("changed", callable):
+			model.disconnect("changed", callable)
 	model = notes_model
 	if model:
 		model.connect("changed", Callable(self, "_on_model_changed"))
@@ -48,18 +52,17 @@ func _draw() -> void:
 		return
 	var active_notes: Array = []
 	for note in model.notes:
+		if not _is_note_visible(note):
+			continue
 		var start_beats = note["start"]
 		var duration_beats = note["duration"]
 		var intensity = _get_note_swell(start_beats, duration_beats, playhead_time_beats)
 		if intensity > 0.0:
-			active_notes.append(note)
+			active_notes.append({"note": note, "intensity": intensity})
 		else:
 			_draw_note(note, intensity, font, font_size)
-	for note in active_notes:
-		var start_beats = note["start"]
-		var duration_beats = note["duration"]
-		var intensity = _get_note_swell(start_beats, duration_beats, playhead_time_beats)
-		_draw_note(note, intensity, font, font_size)
+	for entry in active_notes:
+		_draw_note(entry["note"], entry["intensity"], font, font_size)
 
 func _draw_note(note: Dictionary, intensity: float, font: Font, font_size: int) -> void:
 	var start_beats = note["start"]
@@ -129,10 +132,13 @@ func _draw_note(note: Dictionary, intensity: float, font: Font, font_size: int) 
 		if view_width > 0.0:
 			var min_x = view_scroll_x + 2.0
 			var max_x = view_scroll_x + view_width - text_size.x - 2.0
-			if max_x < min_x:
+			if intensity > 0.0:
+				if max_x < min_x:
+					text_x = min_x
+				else:
+					text_x = clamp(text_x, min_x, max_x)
+			elif text_x < min_x:
 				text_x = min_x
-			else:
-				text_x = clamp(text_x, min_x, max_x)
 		var text_pos = Vector2(text_x, text_y)
 		draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, NOTE_TEXT_COLOR)
 
@@ -173,3 +179,22 @@ func _get_note_swell(start_beats: float, duration_beats: float, time_beats: floa
 
 func _smoothstep(t: float) -> float:
 	return t * t * (3.0 - 2.0 * t)
+
+func _is_note_visible(note: Dictionary) -> bool:
+	if view_width <= 0.0 or view_height <= 0.0:
+		return true
+	var start_beats = note["start"]
+	var duration_beats = note["duration"]
+	var pitch = note["pitch"]
+	var x = start_beats * pixels_per_beat
+	var y = (max_pitch - int(pitch)) * key_height
+	var width = duration_beats * pixels_per_beat
+	var left = view_scroll_x
+	var right = view_scroll_x + view_width
+	var top = view_scroll_y
+	var bottom = view_scroll_y + view_height
+	if x > right or x + width < left:
+		return false
+	if y > bottom or y + key_height < top:
+		return false
+	return true

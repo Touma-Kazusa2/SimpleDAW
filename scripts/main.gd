@@ -43,6 +43,8 @@ var shift_modifier_active: bool = false
 @onready var piano_keyboard = $PianoKeyboard
 @onready var input_debug = $RollPanel/RollContent/InputDebug
 
+const ENVELOPE_MODEL_SCRIPT = preload("res://scripts/envelope_model.gd")
+
 func _ready() -> void:
 	grid.z_as_relative = false
 	notes_view.z_as_relative = false
@@ -63,6 +65,9 @@ func _ready() -> void:
 	var gui_callable = Callable(input_controller, "_on_roll_gui_input")
 	if not roll_content.gui_input.is_connected(gui_callable):
 		roll_content.gui_input.connect(gui_callable)
+	var wheel_callable = Callable(self, "_on_roll_gui_input")
+	if not roll_content.gui_input.is_connected(wheel_callable):
+		roll_content.gui_input.connect(wheel_callable)
 	var playhead_time_callable = Callable(self, "_on_playhead_time_changed")
 	if not input_controller.is_connected("playhead_time_changed", playhead_time_callable):
 		input_controller.connect("playhead_time_changed", playhead_time_callable)
@@ -72,7 +77,18 @@ func _ready() -> void:
 	var debug_callable = Callable(input_debug, "set_last_pos")
 	if not input_controller.is_connected("debug_click", debug_callable):
 		input_controller.connect("debug_click", debug_callable)
+	var extend_callable = Callable(self, "_on_length_extend_requested")
+	if not input_controller.is_connected("length_extend_requested", extend_callable):
+		input_controller.connect("length_extend_requested", extend_callable)
 	_update_playhead()
+	_ensure_envelope_model()
+
+func _ensure_envelope_model() -> void:
+	if get_node_or_null("EnvelopeModel") != null:
+		return
+	var model = ENVELOPE_MODEL_SCRIPT.new()
+	model.name = "EnvelopeModel"
+	add_child(model)
 
 func _apply_config() -> void:
 	var prev_height = last_content_height
@@ -180,29 +196,6 @@ func _input(event: InputEvent) -> void:
 			velocity_mode = !velocity_mode
 			input_controller.velocity_mode = velocity_mode
 
-	if event is InputEventMouseButton and event.pressed:
-		var wheel_up = event.button_index == MOUSE_BUTTON_WHEEL_UP
-		var wheel_down = event.button_index == MOUSE_BUTTON_WHEEL_DOWN
-		if wheel_up or wheel_down:
-			if ctrl_modifier_active:
-				var mouse_local = roll_panel.get_local_mouse_position()
-				var content_x = scroll_x + mouse_local.x
-				var delta = 1.0 if wheel_up else -1.0
-				pixels_per_beat = clamp(pixels_per_beat + (delta * 10.0), MIN_PIXELS_PER_BEAT, MAX_PIXELS_PER_BEAT)
-				_apply_config()
-				_restore_scroll_from_anchor(content_x, mouse_local.x)
-				get_viewport().set_input_as_handled()
-			elif shift_modifier_active:
-				var scroll_delta = SCROLL_STEP_Y * (1.0 if wheel_down else -1.0)
-				_set_scroll_y(scroll_y + scroll_delta)
-				_print_scroll_state("shift+wheel")
-				get_viewport().set_input_as_handled()
-			else:
-				var scroll_delta = SCROLL_STEP_X * (1.0 if wheel_down else -1.0)
-				_set_scroll_x(scroll_x + scroll_delta)
-				_print_scroll_state("wheel")
-				get_viewport().set_input_as_handled()
-
 	if event is InputEventMouseMotion:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 			var delta = -event.relative.y * KEY_HEIGHT_DRAG_SCALE
@@ -221,6 +214,9 @@ func _set_playhead_time(time_beats: float) -> void:
 	notes_view.playhead_time_beats = current_time_beats
 	notes_view.queue_redraw()
 	input_controller.playhead_time_beats = current_time_beats
+
+func set_playhead_time(time_beats: float) -> void:
+	_set_playhead_time(time_beats)
 
 func _set_scroll_x(value: float) -> void:
 	_set_scroll_position(value, scroll_y)
@@ -288,6 +284,36 @@ func _print_scroll_state(source: String) -> void:
 func _restore_scroll_from_anchor(content_x: float, mouse_local_x: float) -> void:
 	_set_scroll_x(content_x - mouse_local_x)
 
+func _on_roll_gui_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var wheel_up = event.button_index == MOUSE_BUTTON_WHEEL_UP
+	var wheel_down = event.button_index == MOUSE_BUTTON_WHEEL_DOWN
+	if not (wheel_up or wheel_down):
+		return
+	var ctrl_pressed = event.ctrl_pressed
+	var shift_pressed = event.shift_pressed
+	if ctrl_pressed:
+		var mouse_local = roll_panel.get_local_mouse_position()
+		var old_ppb = pixels_per_beat
+		var anchor_beat = (scroll_x + mouse_local.x) / old_ppb
+		var delta = 1.0 if wheel_up else -1.0
+		pixels_per_beat = clamp(pixels_per_beat + (delta * 10.0), MIN_PIXELS_PER_BEAT, MAX_PIXELS_PER_BEAT)
+		_apply_config()
+		_set_scroll_x(anchor_beat * pixels_per_beat - mouse_local.x)
+		roll_content.accept_event()
+		return
+	if shift_pressed:
+		var scroll_delta_y = SCROLL_STEP_Y * (1.0 if wheel_down else -1.0)
+		_set_scroll_y(scroll_y + scroll_delta_y)
+		_print_scroll_state("shift+wheel")
+		roll_content.accept_event()
+		return
+	var scroll_delta_x = SCROLL_STEP_X * (1.0 if wheel_down else -1.0)
+	_set_scroll_x(scroll_x + scroll_delta_x)
+	_print_scroll_state("wheel")
+	roll_content.accept_event()
+
 func _sync_viewport() -> void:
 	if roll_panel == null or notes_view == null:
 		return
@@ -303,12 +329,25 @@ func _sync_viewport() -> void:
 	if notes_view.view_scroll_x != scroll_x:
 		notes_view.view_scroll_x = scroll_x
 		needs_redraw = true
+	if notes_view.view_scroll_y != scroll_y:
+		notes_view.view_scroll_y = scroll_y
+		needs_redraw = true
 	notes_view.view_width = view_width
+	notes_view.view_height = view_height
+	if grid.view_scroll_x != scroll_x:
+		grid.view_scroll_x = scroll_x
+		needs_redraw = true
+	if grid.view_scroll_y != scroll_y:
+		grid.view_scroll_y = scroll_y
+		needs_redraw = true
+	grid.view_width = view_width
+	grid.view_height = view_height
 	if piano_keyboard.view_scroll_y != scroll_y:
 		piano_keyboard.view_scroll_y = scroll_y
 		piano_keyboard.queue_redraw()
 	if needs_redraw:
 		notes_view.queue_redraw()
+		grid.queue_redraw()
 		_emit_scroll_changed()
 
 func _emit_scroll_changed() -> void:
@@ -335,3 +374,11 @@ func _on_playhead_drag_started() -> void:
 
 func _on_playhead_time_changed(time_beats: float) -> void:
 	_set_playhead_time(time_beats)
+
+func _on_length_extend_requested(required_beats: float) -> void:
+	if required_beats <= visible_beats:
+		return
+	var step = beats_per_measure * 4
+	while visible_beats < required_beats:
+		visible_beats += step
+	_apply_config()

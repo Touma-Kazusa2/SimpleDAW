@@ -5,6 +5,7 @@ const DEBUG_LOGS := false
 signal debug_click(local_pos: Vector2)
 signal playhead_drag_started
 signal playhead_time_changed(time_beats: float)
+signal length_extend_requested(required_beats: float)
 
 @export var debug_enabled: bool = false
 
@@ -111,14 +112,14 @@ func set_grid_params(ppb: float, kh: float, min_p: int, max_p: int, beats: int) 
 func _try_create_note(local_pos: Vector2) -> bool:
 	if local_pos.x < 0 or local_pos.y < 0:
 		return false
-	var grid_width = visible_beats * pixels_per_beat
 	var grid_height = (max_pitch - min_pitch + 1) * key_height
-	if local_pos.x > grid_width or local_pos.y > grid_height:
+	if local_pos.y > grid_height:
 		return false
 	var pitch = max_pitch - int(floor(local_pos.y / key_height))
 	if pitch < min_pitch or pitch > max_pitch:
 		return false
 	var start_beats = int(floor(local_pos.x / pixels_per_beat))
+	_ensure_length(start_beats + 1.0)
 	model.add_note(pitch, start_beats, 1.0)
 	return true
 
@@ -169,7 +170,8 @@ func _update_note_drag(local_pos: Vector2) -> void:
 		if snap_enabled:
 			snapped_start = _snap_beats(raw_start)
 		var snapped_pitch = _snap_pitch(local_pos.y - drag_offset.y)
-		snapped_start = clamp(snapped_start, 0.0, float(visible_beats))
+		snapped_start = max(0.0, snapped_start)
+		_ensure_length(snapped_start + drag_note_duration)
 		_update_note(drag_note_index, snapped_pitch, snapped_start, drag_note_duration)
 	elif drag_mode == "resize_left":
 		var end_beats = drag_note_start + drag_note_duration
@@ -185,6 +187,7 @@ func _update_note_drag(local_pos: Vector2) -> void:
 			new_end = _snap_beats(new_end)
 		new_end = max(new_end, drag_note_start + MIN_DURATION_BEATS)
 		var new_duration = max(MIN_DURATION_BEATS, new_end - drag_note_start)
+		_ensure_length(new_end)
 		_update_note(drag_note_index, drag_note_pitch, drag_note_start, new_duration)
 
 func _update_note(index: int, pitch: int, start_beats: float, duration_beats: float) -> void:
@@ -209,6 +212,12 @@ func _update_velocity_drag(local_pos: Vector2) -> void:
 	var velocity_t = (local_pos.x - rect.position.x) / rect.size.x
 	var velocity = int(round(clamp(velocity_t, 0.0, 1.0) * 127.0))
 	model.update_velocity(drag_velocity_index, velocity)
+
+func _ensure_length(required_beats: float) -> void:
+	if required_beats <= visible_beats:
+		return
+	visible_beats = int(ceil(required_beats))
+	emit_signal("length_extend_requested", required_beats)
 
 func _find_note_at(local_pos: Vector2) -> Dictionary:
 	for i in range(model.notes.size() - 1, -1, -1):

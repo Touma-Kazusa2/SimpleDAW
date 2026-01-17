@@ -31,7 +31,14 @@ func _draw() -> void:
 	var font = get_theme_default_font()
 	var font_size = int(clamp(key_height * 0.7, 8.0, 18.0))
 
-	for i in range(total_keys):
+	var key_start = 0
+	var key_end = total_keys
+	if key_height > 0.0:
+		key_start = int(floor(view_scroll_y / key_height)) - 1
+		key_end = int(ceil((view_scroll_y + size.y) / key_height)) + 1
+	key_start = clamp(key_start, 0, total_keys)
+	key_end = clamp(key_end, 0, total_keys)
+	for i in range(key_start, key_end):
 		var pitch = max_pitch - i
 		var y = i * key_height - view_scroll_y
 		var is_black = BLACK_KEYS.has(pitch % 12)
