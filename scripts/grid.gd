@@ -6,6 +6,7 @@ extends Control
 @export var max_pitch: int = 96
 @export var beats_per_measure: int = 4
 @export var visible_beats: int = 32
+@export var clip_length_beats: float = 0.0
 @export var view_scroll_x: float = 0.0
 @export var view_scroll_y: float = 0.0
 @export var view_width: float = 0.0
@@ -15,6 +16,7 @@ const COLOR_BG = Color(0.08, 0.08, 0.09)
 const COLOR_GRID = Color(0.2, 0.2, 0.22)
 const COLOR_MEASURE = Color(0.6, 0.6, 0.63)
 const COLOR_OCTAVE = Color(0.62, 0.62, 0.66)
+const COLOR_BEYOND_CLIP = Color(0.02, 0.02, 0.02, 0.55)
 
 func _draw() -> void:
 	var total_width = visible_beats * pixels_per_beat
@@ -52,3 +54,13 @@ func _draw() -> void:
 		var pitch = max_pitch - i
 		var color = COLOR_OCTAVE if pitch % 12 == 11 else COLOR_GRID
 		draw_line(Vector2(draw_x0, y), Vector2(draw_x1, y), color, 1.0)
+
+	if clip_length_beats > 0.0 and clip_length_beats < float(visible_beats):
+		var clip_end_x = clip_length_beats * pixels_per_beat
+		var overlay_start = max(draw_x0, clip_end_x)
+		if draw_x1 > overlay_start:
+			draw_rect(
+				Rect2(Vector2(overlay_start, draw_y0), Vector2(draw_x1 - overlay_start, draw_y1 - draw_y0)),
+				COLOR_BEYOND_CLIP,
+				true
+			)

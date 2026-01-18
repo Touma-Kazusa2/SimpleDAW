@@ -32,6 +32,8 @@ var last_view_width: float = 0.0
 var last_view_height: float = 0.0
 var last_content_height: float = 0.0
 var shift_modifier_active: bool = false
+var clip_model: Node = null
+var sync_clip_length := true
 
 @onready var grid = $RollPanel/RollContent/Grid
 @onready var notes_view = $RollPanel/RollContent/NotesLayer
@@ -82,6 +84,7 @@ func _ready() -> void:
 		input_controller.connect("length_extend_requested", extend_callable)
 	_update_playhead()
 	_ensure_envelope_model()
+	_sync_clip_model()
 
 func _ensure_envelope_model() -> void:
 	if get_node_or_null("EnvelopeModel") != null:
@@ -89,6 +92,8 @@ func _ensure_envelope_model() -> void:
 	var model = ENVELOPE_MODEL_SCRIPT.new()
 	model.name = "EnvelopeModel"
 	add_child(model)
+	if clip_model != null and model.has_method("set_clip"):
+		model.call("set_clip", clip_model)
 
 func _apply_config() -> void:
 	var prev_height = last_content_height
@@ -144,6 +149,7 @@ func _apply_config() -> void:
 	last_view_width = roll_panel.size.x
 	last_view_height = roll_panel.size.y
 	_sync_viewport()
+	_sync_clip_model()
 
 func _process(delta: float) -> void:
 	if is_playing:
@@ -382,3 +388,40 @@ func _on_length_extend_requested(required_beats: float) -> void:
 	while visible_beats < required_beats:
 		visible_beats += step
 	_apply_config()
+
+func set_clip_model(next_clip: Node) -> void:
+	if clip_model != null and clip_model.has_signal("changed"):
+		var callable = Callable(self, "_on_clip_model_changed")
+		if clip_model.is_connected("changed", callable):
+			clip_model.disconnect("changed", callable)
+	clip_model = next_clip
+	if clip_model != null and clip_model.has_signal("changed"):
+		clip_model.connect("changed", Callable(self, "_on_clip_model_changed"))
+	if notes_model != null and notes_model.has_method("set_clip"):
+		notes_model.call("set_clip", clip_model)
+	_ensure_envelope_model()
+	var envelope_model = get_node_or_null("EnvelopeModel")
+	if envelope_model != null and envelope_model.has_method("set_clip"):
+		envelope_model.call("set_clip", clip_model)
+	sync_clip_length = false
+	_sync_clip_model()
+
+func _on_clip_model_changed() -> void:
+	if clip_model == null or grid == null:
+		return
+	grid.clip_length_beats = float(clip_model.clip_length_beats)
+	grid.queue_redraw()
+
+func set_view_beats(view_beats: int, sync_to_clip: bool = true) -> void:
+	visible_beats = max(1, view_beats)
+	sync_clip_length = sync_to_clip
+	_apply_config()
+
+func _sync_clip_model() -> void:
+	if clip_model == null:
+		return
+	if sync_clip_length or float(clip_model.clip_length_beats) <= 0.0:
+		clip_model.clip_length_beats = float(visible_beats)
+	clip_model.clip_start_beats = 0.0
+	if grid != null:
+		grid.clip_length_beats = float(clip_model.clip_length_beats)

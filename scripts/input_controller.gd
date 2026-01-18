@@ -36,10 +36,17 @@ var velocity_mode: bool = false
 var is_dragging_velocity: bool = false
 var drag_velocity_index: int = -1
 var snap_enabled: bool = false
+var note_index_by_beat: Dictionary = {}
+var note_index_dirty: bool = true
 
 func setup(notes_model: Node, roll_root: Control) -> void:
 	model = notes_model
 	roll_content = roll_root
+	note_index_dirty = true
+	if model != null and model.has_signal("changed"):
+		var callable = Callable(self, "_on_model_changed")
+		if not model.is_connected("changed", callable):
+			model.connect("changed", callable)
 
 func _on_roll_gui_input(event: InputEvent) -> void:
 	if roll_content == null or model == null:
@@ -220,7 +227,19 @@ func _ensure_length(required_beats: float) -> void:
 	emit_signal("length_extend_requested", required_beats)
 
 func _find_note_at(local_pos: Vector2) -> Dictionary:
-	for i in range(model.notes.size() - 1, -1, -1):
+	if model == null:
+		return {"index": -1}
+	_ensure_note_index()
+	var beat_index = int(floor(local_pos.x / pixels_per_beat))
+	if beat_index < 0:
+		return {"index": -1}
+	var candidates = note_index_by_beat.get(beat_index, [])
+	if candidates.is_empty():
+		return {"index": -1}
+	for idx in range(candidates.size() - 1, -1, -1):
+		var i = int(candidates[idx])
+		if i < 0 or i >= model.notes.size():
+			continue
 		var note = model.notes[i]
 		var start_beats = note["start"]
 		var duration_beats = note["duration"]
@@ -257,8 +276,30 @@ func _find_note_at(local_pos: Vector2) -> Dictionary:
 			"start": start_beats,
 			"pitch": pitch,
 			"duration": duration_beats
-		}
+			}
 	return {"index": -1}
+
+func _on_model_changed() -> void:
+	note_index_dirty = true
+
+func _ensure_note_index() -> void:
+	if not note_index_dirty:
+		return
+	note_index_dirty = false
+	note_index_by_beat.clear()
+	if model == null:
+		return
+	for i in range(model.notes.size()):
+		var note = model.notes[i]
+		var start_beats = float(note["start"])
+		var duration_beats = float(note["duration"])
+		var end_beats = start_beats + duration_beats
+		var start_beat = int(floor(start_beats))
+		var end_beat = int(ceil(end_beats))
+		for beat in range(start_beat, end_beat):
+			var bucket = note_index_by_beat.get(beat, [])
+			bucket.append(i)
+			note_index_by_beat[beat] = bucket
 
 func _snap_beats(beats: float) -> float:
 	var step = SNAP_STEPS[snap_step_index]

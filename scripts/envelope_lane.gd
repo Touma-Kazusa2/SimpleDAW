@@ -22,6 +22,7 @@ var last_draw_time := -1.0
 var last_draw_value := 0.0
 var last_delete_time := -1.0
 var curve_mode: String = "line"
+var _redraw_pending := false
 
 const DEFAULT_VALUE := 0.5
 const POINT_RADIUS := 3.0
@@ -37,7 +38,7 @@ func set_from_roll(roll_node: Control) -> void:
 	beats_per_measure = int(roll_node.get("beats_per_measure"))
 	visible_beats = int(roll_node.get("visible_beats"))
 	set_model(roll_node.get_node_or_null("EnvelopeModel"))
-	queue_redraw()
+	_request_redraw()
 
 func set_model(next_model: Node) -> void:
 	if model:
@@ -47,9 +48,10 @@ func set_model(next_model: Node) -> void:
 	model = next_model
 	if model:
 		model.connect("changed", Callable(self, "_on_model_changed"))
+	_request_redraw()
 
 func _on_model_changed() -> void:
-	queue_redraw()
+	_request_redraw()
 
 func set_snap_provider(next_provider: Node) -> void:
 	snap_provider = next_provider
@@ -60,7 +62,7 @@ func _ready() -> void:
 func set_view(scroll_x: float, width: float) -> void:
 	view_scroll_x = scroll_x
 	view_width = width
-	queue_redraw()
+	_request_redraw()
 
 func _draw() -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
@@ -281,12 +283,22 @@ func set_curve_mode(mode: String) -> void:
 	if mode != "line" and mode != "bezier":
 		return
 	curve_mode = mode
-	queue_redraw()
+	_request_redraw()
 
 func toggle_curve_mode() -> String:
 	curve_mode = "bezier" if curve_mode == "line" else "line"
-	queue_redraw()
+	_request_redraw()
 	return curve_mode
+
+func _request_redraw() -> void:
+	if _redraw_pending:
+		return
+	_redraw_pending = true
+	call_deferred("_flush_redraw")
+
+func _flush_redraw() -> void:
+	_redraw_pending = false
+	queue_redraw()
 
 func _draw_bezier_curve(points: Array, clip_width: float) -> void:
 	var curve = Curve2D.new()

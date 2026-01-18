@@ -1,0 +1,230 @@
+[gd_scene load_steps=12 format=3 uid="uid://6s3r3p6oyp2n"]
+
+[ext_resource type="Script" uid="uid://w2h2l9d9s8q5c" path="res://scripts/panel_slot.gd" id="1_panel_slot"]
+[ext_resource type="Script" uid="uid://kvy5pagfy4cu" path="res://scripts/custom_scrollbar.gd" id="2_custom_scrollbar"]
+[ext_resource type="Script" uid="uid://22283bxyyskv" path="res://scripts/envelope_drag_bar.gd" id="3_envelope_drag_bar"]
+[ext_resource type="Script" uid="uid://cbanr2patqo0k" path="res://scripts/envelope_lane.gd" id="4_envelope_lane"]
+[ext_resource type="Script" uid="uid://bdx61n2e7rati" path="res://scripts/comment_lane.gd" id="5_comment_lane"]
+[ext_resource type="Script" uid="uid://bqh5y2bax0e2o" path="res://scripts/three_d_panel.gd" id="6_three_d_panel"]
+[ext_resource type="Script" uid="uid://fx4yezwx8t5xm" path="res://scripts/arrangement_lane.gd" id="7_arrangement_lane"]
+[ext_resource type="Script" uid="uid://fgqodr12wueh" path="res://scripts/overlay_frame.gd" id="8_overlay_frame"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_Clear"]
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="BoxMesh" id="BoxMesh_1"]
+
+[node name="PanelSlot" type="VBoxContainer"]
+layout_mode = 1
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+script = ExtResource("1_panel_slot")
+
+[node name="HeaderRow" type="HBoxContainer" parent="."]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TrackSelector" type="OptionButton" parent="HeaderRow"]
+custom_minimum_size = Vector2(140, 28)
+layout_mode = 2
+focus_mode = 0
+
+[node name="ModeButton" type="Button" parent="HeaderRow"]
+custom_minimum_size = Vector2(36, 28)
+layout_mode = 2
+focus_mode = 0
+text = ""
+
+[node name="HeaderSpacer" type="Control" parent="HeaderRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TabRow" type="HBoxContainer" parent="."]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ClipTabs" type="TabBar" parent="TabRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AddClipButton" type="Button" parent="TabRow"]
+custom_minimum_size = Vector2(36, 28)
+layout_mode = 2
+focus_mode = 0
+text = "+"
+
+[node name="HScrollRow" type="HBoxContainer" parent="."]
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HScrollSpacer" type="Control" parent="HScrollRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+
+[node name="HScrollFrame" type="PanelContainer" parent="HScrollRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+
+[node name="HScroll" type="Control" parent="HScrollRow/HScrollFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("2_custom_scrollbar")
+
+[node name="HScrollOverlay" type="Control" parent="HScrollRow/HScrollFrame"]
+layout_mode = 2
+script = ExtResource("8_overlay_frame")
+border_width = 2.0
+border_expand = 2.0
+
+[node name="PanelRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="PanelSpacer" type="Control" parent="PanelRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+
+[node name="PanelFrame" type="PanelContainer" parent="PanelRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+
+[node name="EnvelopeLane" type="Control" parent="PanelRow/PanelFrame"]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("4_envelope_lane")
+
+[node name="CommentLane" type="Control" parent="PanelRow/PanelFrame"]
+visible = false
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("5_comment_lane")
+
+[node name="ArrangementLane" type="Control" parent="PanelRow/PanelFrame"]
+visible = false
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("7_arrangement_lane")
+
+[node name="ThreeDLane" type="Control" parent="PanelRow/PanelFrame"]
+visible = false
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("6_three_d_panel")
+target_path = NodePath("Viewport/SceneRoot")
+camera_path = NodePath("Viewport/SceneRoot/Camera3D")
+
+[node name="ViewportTexture" type="TextureRect" parent="PanelRow/PanelFrame/ThreeDLane"]
+layout_mode = 0
+mouse_filter = 2
+
+[node name="Viewport" type="SubViewport" parent="PanelRow/PanelFrame/ThreeDLane"]
+handle_input_locally = false
+size = Vector2i(2, 2)
+render_target_update_mode = 0
+
+[node name="SceneRoot" type="Node3D" parent="PanelRow/PanelFrame/ThreeDLane/Viewport"]
+
+[node name="Cube" type="MeshInstance3D" parent="PanelRow/PanelFrame/ThreeDLane/Viewport/SceneRoot"]
+mesh = SubResource("BoxMesh_1")
+
+[node name="Light" type="DirectionalLight3D" parent="PanelRow/PanelFrame/ThreeDLane/Viewport/SceneRoot"]
+transform = Transform3D(0.6967067, -0.4050497, 0.59205955, 0, 0.8253356, 0.5646425, -0.7173561, -0.3933902, 0.57501686, 0, 0, 0)
+
+[node name="Camera3D" type="Camera3D" parent="PanelRow/PanelFrame/ThreeDLane/Viewport/SceneRoot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 2, 3.5)
+
+[node name="PanelRightSpacer" type="HBoxContainer" parent="PanelRow"]
+layout_mode = 2
+
+[node name="PanelVScroll" type="Control" parent="PanelRow/PanelRightSpacer"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+size_flags_vertical = 3
+script = ExtResource("2_custom_scrollbar")
+vertical = true
+
+[node name="EnvelopeBarRow" type="HBoxContainer" parent="."]
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="EnvelopeBarSpacer" type="Control" parent="EnvelopeBarRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+
+[node name="EnvelopeBarFrame" type="PanelContainer" parent="EnvelopeBarRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+
+[node name="EnvelopeDragBar" type="Control" parent="EnvelopeBarRow/EnvelopeBarFrame"]
+clip_contents = true
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("3_envelope_drag_bar")
+
+[node name="EnvelopeBarOverlay" type="Control" parent="EnvelopeBarRow/EnvelopeBarFrame"]
+layout_mode = 2
+script = ExtResource("8_overlay_frame")
+border_width = 2.0
+border_expand = 2.0
+
+[node name="EnvelopeBarRightSpacer" type="Control" parent="EnvelopeBarRow"]
+layout_mode = 2
+
+[node name="RollFrameRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="RollFrame" type="PanelContainer" parent="RollFrameRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+
+[node name="RollClip" type="Control" parent="RollFrameRow/RollFrame"]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="RollRow" type="HBoxContainer" parent="RollFrameRow/RollFrame/RollClip"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="RollContainer" type="Control" parent="RollFrameRow/RollFrame/RollClip/RollRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="VScroll" type="Control" parent="RollFrameRow"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+size_flags_vertical = 3
+script = ExtResource("2_custom_scrollbar")
+vertical = true
+
+[node name="RollFrameOverlay" type="Control" parent="RollFrameRow/RollFrame"]
+layout_mode = 2
+script = ExtResource("8_overlay_frame")
+border_width = 3.0
+border_expand = 3.0

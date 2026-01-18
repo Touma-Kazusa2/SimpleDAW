@@ -4,12 +4,14 @@ signal selection_committed(start_beats: float, end_beats: float)
 signal selection_cleared
 signal panel_toggled(is_open: bool)
 signal panel_height_changed(height: float)
+signal selection_double_clicked(start_beats: float, end_beats: float)
 
 @export var snap_threshold: float = 12.0
 @export var drag_threshold: float = 6.0
 @export var snap_step_beats: float = 1.0
 @export var snap_enabled: bool = true
 @export var max_panel_height: float = -1.0
+@export var allow_panel_resize: bool = true
 
 var panel: Control = null
 var panel_height: float = 0.0
@@ -38,6 +40,9 @@ func setup(target_panel: Control) -> void:
 		panel_height = panel.custom_minimum_size.y
 	queue_redraw()
 
+func set_allow_panel_resize(enabled: bool) -> void:
+	allow_panel_resize = enabled
+
 func update_from_roll(ppb: float, beats: int, scroll_x: float, width: float) -> void:
 	pixels_per_beat = ppb
 	visible_beats = beats
@@ -52,6 +57,10 @@ func _ready() -> void:
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			if event.double_click:
+				_try_emit_double_click(event.position.x)
+				accept_event()
+				return
 			_dragging = true
 			_drag_axis = ""
 			_drag_start_pos = event.position
@@ -84,14 +93,15 @@ func _update_drag(pos: Vector2) -> void:
 		pos.y - _drag_start_pos.y
 	)
 	if _drag_axis == "":
-		if abs(delta.y) >= drag_threshold:
+		if abs(delta.y) >= drag_threshold and allow_panel_resize:
 			_drag_axis = "vertical"
 		elif abs(delta.x) >= drag_threshold:
 			_drag_axis = "horizontal"
 		else:
 			return
 	if _drag_axis == "vertical":
-		_update_vertical_drag(pos)
+		if allow_panel_resize:
+			_update_vertical_drag(pos)
 	elif _drag_axis == "horizontal":
 		_update_horizontal_drag(pos.x)
 
@@ -125,7 +135,8 @@ func _update_horizontal_drag(current_x: float) -> void:
 
 func _finalize_drag(pos: Vector2) -> void:
 	if _drag_axis == "vertical":
-		_finalize_vertical()
+		if allow_panel_resize:
+			_finalize_vertical()
 	elif _drag_axis == "horizontal":
 		_finalize_horizontal(pos.x)
 
@@ -180,6 +191,38 @@ func set_panel_open(open: bool) -> void:
 	emit_signal("panel_toggled", panel_height > 0.0)
 	emit_signal("panel_height_changed", panel_height)
 
+func ensure_panel_height(min_height: float) -> void:
+	if panel == null:
+		return
+	var next_height = max(panel_height, min_height)
+	if max_panel_height > 0.0:
+		next_height = min(next_height, max_panel_height)
+	panel_height = max(0.0, next_height)
+	panel.custom_minimum_size.y = panel_height
+	panel.visible = panel_height > 0.0
+	if panel.get_parent() is Control:
+		(panel.get_parent() as Control).queue_redraw()
+	emit_signal("panel_toggled", panel_height > 0.0)
+	emit_signal("panel_height_changed", panel_height)
+
+func clamp_panel_height(limit_height: float) -> void:
+	if panel == null:
+		return
+	if limit_height <= 0.0:
+		return
+	var was_open = panel_height > 0.0
+	var next_height = min(panel_height, limit_height)
+	if is_equal_approx(next_height, panel_height):
+		return
+	panel_height = max(0.0, next_height)
+	panel.custom_minimum_size.y = panel_height
+	panel.visible = panel_height > 0.0
+	if panel.get_parent() is Control:
+		(panel.get_parent() as Control).queue_redraw()
+	if was_open != (panel_height > 0.0):
+		emit_signal("panel_toggled", panel_height > 0.0)
+	emit_signal("panel_height_changed", panel_height)
+
 func is_panel_open() -> bool:
 	return panel_height > 0.0
 
@@ -231,6 +274,18 @@ func _snap_beats(beats: float) -> float:
 	if step <= 0.0:
 		return beats
 	return round(beats / step) * step
+
+func _try_emit_double_click(local_x: float) -> void:
+	if selection_start < 0.0 or selection_end <= selection_start:
+		return
+	if pixels_per_beat <= 0.0:
+		return
+	var time_beats = (view_scroll_x + local_x) / pixels_per_beat
+	var min_beats = min(selection_start, selection_end)
+	var max_beats = max(selection_start, selection_end)
+	if time_beats < min_beats or time_beats > max_beats:
+		return
+	emit_signal("selection_double_clicked", selection_start, selection_end)
 
 func toggle_snap() -> bool:
 	snap_enabled = !snap_enabled
@@ -301,3 +356,8 @@ func _draw_selection() -> void:
 
 func set_selection_from_roll(start_beats: float, end_beats: float) -> void:
 	set_selection(start_beats, end_beats)
+
+func get_selection_range() -> Array:
+	if selection_start < 0.0 or selection_end <= selection_start:
+		return []
+	return [selection_start, selection_end]

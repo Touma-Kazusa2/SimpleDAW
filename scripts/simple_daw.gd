@@ -1,294 +1,216 @@
 extends Control
 
-const PIANO_ROLL_SCENE = preload("res://piano_roll.tscn")
 const ICON_SNAP_ON = preload("res://Lucid V1.2/PNG/Flat/16/Grid.png")
 const ICON_SNAP_OFF = preload("res://Lucid V1.2/PNG/Flat/16/Slash.png")
-const ICON_CURVE_LINE = preload("res://Lucid V1.2/PNG/Flat/16/Signal-1.png")
-const ICON_CURVE_BEZIER = preload("res://Lucid V1.2/PNG/Flat/16/Signal-2.png")
+const PROJECT_MODEL = preload("res://scripts/models/project_model.gd")
 
 @onready var browser_panel: Control = $"RootLayout/MainSplit/BrowserPanel"
 @onready var browser_toggle: Button = $"RootLayout/TopBar/TopBarContent/BrowserToggle"
-@onready var tab_bar: TabBar = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow/RollTabs"
-@onready var add_tab_button: Button = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow/AddTabButton"
-@onready var roll_area: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"
-@onready var tab_row: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/TabRow"
-@onready var h_scroll_row: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow"
-@onready var envelope_bar_row: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow"
-@onready var roll_stack: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow/RollStack"
-@onready var h_scroll_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollSpacer"
-@onready var h_scroll: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/HScrollRow/HScrollFrame/HScroll"
-@onready var v_scroll: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollClip/RollRow/VScroll"
+@onready var add_track_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/AddTrackButton")
+@onready var shared_scroll_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/SharedScrollButton")
+@onready var track_name_edit: LineEdit = get_node_or_null("RootLayout/TopBar/TopBarContent/TrackNameEdit")
+@onready var clip_name_edit: LineEdit = get_node_or_null("RootLayout/TopBar/TopBarContent/ClipNameEdit")
+@onready var track_list: ItemList = $"RootLayout/MainSplit/BrowserPanel/BrowserContent/TrackList"
+@onready var track_up_button: Button = $"RootLayout/MainSplit/BrowserPanel/BrowserContent/TrackButtons/TrackUpButton"
+@onready var track_down_button: Button = $"RootLayout/MainSplit/BrowserPanel/BrowserContent/TrackButtons/TrackDownButton"
+@onready var track_remove_button: Button = $"RootLayout/MainSplit/BrowserPanel/BrowserContent/TrackButtons/TrackRemoveButton"
 @onready var selection_snap_button: Button = $"RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar/SelectionSnapButton"
-@onready var envelope_bar_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarSpacer"
-@onready var envelope_lane_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneSpacer"
-@onready var envelope_drag_bar: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarFrame/EnvelopeDragBar"
-@onready var envelope_lane: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame/EnvelopeLane"
-@onready var envelope_lane_overlay: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneFrame/EnvelopeLaneOverlay"
-@onready var roll_frame_overlay: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/RollFrame/RollFrameOverlay"
-@onready var envelope_bar_right_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeBarRow/EnvelopeBarRightSpacer"
-@onready var envelope_lane_right_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneRightSpacer"
-@onready var curve_mode_button: Button = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/EnvelopeLaneRow/EnvelopeLaneRightSpacer/CurveModeButton"
+@onready var panel_slot_a: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/PanelSlotA"
+@onready var panel_slot_b: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/PanelSlotB"
 
-var piano_roll: Control = null
-var notes_model: Node = null
-
-var updating_scrollbars := false
-var active_roll_panel: Control = null
+var project_model: Node = null
+var active_slot: Node = null
+var shared_scroll_enabled := false
+var updating_track_list := false
+var updating_name_fields := false
+var syncing_shared_scroll := false
 
 func _ready() -> void:
+	_ensure_project_model()
+	_init_controls()
+	_init_panel_slots()
+	_refresh_track_list()
 	_update_browser_toggle_label()
-	_init_tabs()
-	_sync_scrollbars()
-	_init_envelope_lane()
+	_set_active_slot(panel_slot_a)
+	_update_shared_scroll_label()
+
+func _ensure_project_model() -> void:
+	if project_model != null:
+		return
+	project_model = PROJECT_MODEL.new()
+	project_model.name = "ProjectModel"
+	add_child(project_model)
+	if project_model.tracks.is_empty():
+		project_model.create_track("Track 1")
+	if project_model.has_signal("changed"):
+		project_model.connect("changed", Callable(self, "_on_project_model_changed"))
+
+func _init_controls() -> void:
+	if browser_toggle != null and browser_toggle.has_signal("pressed"):
+		var callable = Callable(self, "_on_browser_toggle_pressed")
+		if not browser_toggle.is_connected("pressed", callable):
+			browser_toggle.connect("pressed", callable)
+	if add_track_button != null and add_track_button.has_signal("pressed"):
+		var add_callable = Callable(self, "_on_add_track_pressed")
+		if not add_track_button.is_connected("pressed", add_callable):
+			add_track_button.connect("pressed", add_callable)
+	if shared_scroll_button != null and shared_scroll_button.has_signal("pressed"):
+		shared_scroll_button.toggle_mode = true
+		var shared_callable = Callable(self, "_on_shared_scroll_pressed")
+		if not shared_scroll_button.is_connected("pressed", shared_callable):
+			shared_scroll_button.connect("pressed", shared_callable)
+	if selection_snap_button != null and selection_snap_button.has_signal("pressed"):
+		var snap_callable = Callable(self, "_on_selection_snap_pressed")
+		if not selection_snap_button.is_connected("pressed", snap_callable):
+			selection_snap_button.connect("pressed", snap_callable)
+	if track_list != null and track_list.has_signal("item_selected"):
+		var list_callable = Callable(self, "_on_track_list_selected")
+		if not track_list.is_connected("item_selected", list_callable):
+			track_list.connect("item_selected", list_callable)
+	if track_up_button != null and track_up_button.has_signal("pressed"):
+		var up_callable = Callable(self, "_on_track_move_up_pressed")
+		if not track_up_button.is_connected("pressed", up_callable):
+			track_up_button.connect("pressed", up_callable)
+	if track_down_button != null and track_down_button.has_signal("pressed"):
+		var down_callable = Callable(self, "_on_track_move_down_pressed")
+		if not track_down_button.is_connected("pressed", down_callable):
+			track_down_button.connect("pressed", down_callable)
+	if track_remove_button != null and track_remove_button.has_signal("pressed"):
+		var remove_callable = Callable(self, "_on_track_remove_pressed")
+		if not track_remove_button.is_connected("pressed", remove_callable):
+			track_remove_button.connect("pressed", remove_callable)
+	if track_name_edit != null:
+		if not track_name_edit.text_submitted.is_connected(_on_track_name_submitted):
+			track_name_edit.text_submitted.connect(_on_track_name_submitted)
+		if not track_name_edit.focus_exited.is_connected(_on_track_name_focus_exited):
+			track_name_edit.focus_exited.connect(_on_track_name_focus_exited)
+	if clip_name_edit != null:
+		if not clip_name_edit.text_submitted.is_connected(_on_clip_name_submitted):
+			clip_name_edit.text_submitted.connect(_on_clip_name_submitted)
+		if not clip_name_edit.focus_exited.is_connected(_on_clip_name_focus_exited):
+			clip_name_edit.focus_exited.connect(_on_clip_name_focus_exited)
+
+func _init_panel_slots() -> void:
+	for slot in [panel_slot_a, panel_slot_b]:
+		if slot == null:
+			continue
+		if slot.has_method("set_project_model"):
+			slot.call("set_project_model", project_model)
+		if slot.has_signal("slot_focused"):
+			var focus_callable = Callable(self, "_on_slot_focused")
+			if not slot.is_connected("slot_focused", focus_callable):
+				slot.connect("slot_focused", focus_callable)
+		if slot.has_signal("scroll_x_changed"):
+			var scroll_callable = Callable(self, "_on_slot_scroll_x_changed")
+			if not slot.is_connected("scroll_x_changed", scroll_callable):
+				slot.connect("scroll_x_changed", scroll_callable)
+		if slot.has_signal("track_changed"):
+			var track_callable = Callable(self, "_on_slot_track_changed")
+			if not slot.is_connected("track_changed", track_callable):
+				slot.connect("track_changed", track_callable)
+		if slot.has_signal("clip_changed"):
+			var clip_callable = Callable(self, "_on_slot_clip_changed")
+			if not slot.is_connected("clip_changed", clip_callable):
+				slot.connect("clip_changed", clip_callable)
+
+func _on_project_model_changed() -> void:
+	_refresh_track_list()
+	_update_name_edits()
+	_sync_track_list_to_active_slot()
+	if shared_scroll_enabled:
+		_update_shared_view_beats()
+
+func _set_active_slot(slot: Node) -> void:
+	if slot == null:
+		return
+	active_slot = slot
+	_sync_track_list_to_active_slot()
+	_update_name_edits()
 	_update_selection_snap_label()
-	_update_curve_mode_label()
-	_update_envelope_panel_limit()
+
+func _on_slot_focused(slot_index: int) -> void:
+	var slot = _slot_by_index(slot_index)
+	if slot != null:
+		_set_active_slot(slot)
+
+func _on_slot_scroll_x_changed(slot_index: int, scroll_x: float, _view_width: float) -> void:
+	if not shared_scroll_enabled or syncing_shared_scroll:
+		return
+	var target_slot = panel_slot_b if slot_index == 0 else panel_slot_a
+	if target_slot == null:
+		return
+	syncing_shared_scroll = true
+	target_slot.call("set_scroll_x", scroll_x, true)
+	syncing_shared_scroll = false
+
+func _on_slot_track_changed(slot_index: int, _track_index: int) -> void:
+	if active_slot == _slot_by_index(slot_index):
+		_sync_track_list_to_active_slot()
+		_update_name_edits()
+	if shared_scroll_enabled:
+		_update_shared_view_beats()
+
+func _on_slot_clip_changed(slot_index: int, _clip_index: int) -> void:
+	if active_slot == _slot_by_index(slot_index):
+		_update_name_edits()
+	if shared_scroll_enabled:
+		_update_shared_view_beats()
 
 func _on_browser_toggle_pressed() -> void:
 	browser_panel.visible = not browser_panel.visible
 	_update_browser_toggle_label()
 
-func _on_tab_changed(tab_index: int) -> void:
-	_select_tab(tab_index)
-
-func _on_add_tab_pressed() -> void:
-	var roll = PIANO_ROLL_SCENE.instantiate()
-	var label = "Roll %d" % (roll_stack.get_child_count() + 1)
-	roll.name = label
-	roll_stack.add_child(roll)
-	tab_bar.add_tab(label)
-	tab_bar.current_tab = tab_bar.get_tab_count() - 1
-	_select_tab(tab_bar.current_tab)
-
-func _on_h_scroll_changed(value: float) -> void:
-	if updating_scrollbars or piano_roll == null:
-		return
-	piano_roll.call("set_scroll_x", value)
-	var roll_panel = piano_roll.get_node_or_null("RollPanel") as Control
-	var view_width = roll_panel.size.x if roll_panel else 0.0
-	_update_envelope_view(value, view_width)
-
-func _on_v_scroll_changed(value: float) -> void:
-	if updating_scrollbars or piano_roll == null:
-		return
-	piano_roll.call("set_scroll_y", value)
-
-func _on_roll_scroll_changed(
-	scroll_x: float,
-	scroll_y: float,
-	max_x: float,
-	max_y: float,
-	view_width: float,
-	view_height: float
-) -> void:
-	_update_scrollbars(scroll_x, scroll_y, max_x, max_y, view_width, view_height)
-	_update_envelope_view(scroll_x, view_width)
-
-func _init_tabs() -> void:
-	if tab_bar == null or roll_stack == null:
-		return
-	while tab_bar.get_tab_count() > 0:
-		tab_bar.remove_tab(0)
-	for child in roll_stack.get_children():
-		tab_bar.add_tab(child.name)
-	if tab_bar.get_tab_count() == 0:
-		for i in range(2):
-			var roll = PIANO_ROLL_SCENE.instantiate()
-			var label = "Roll %d" % (i + 1)
-			roll.name = label
-			roll_stack.add_child(roll)
-			tab_bar.add_tab(label)
-	tab_bar.current_tab = 0
-	_select_tab(0)
-
-func _select_tab(tab_index: int) -> void:
-	if roll_stack == null:
-		return
-	var children = roll_stack.get_children()
-	if tab_index < 0 or tab_index >= children.size():
-		return
-	for i in range(children.size()):
-		var child = children[i] as CanvasItem
-		if child:
-			child.visible = i == tab_index
-	_set_active_roll(children[tab_index])
-
-func _set_active_roll(roll: Control) -> void:
-	if piano_roll and piano_roll.has_signal("scroll_changed"):
-		var callable = Callable(self, "_on_roll_scroll_changed")
-		if piano_roll.is_connected("scroll_changed", callable):
-			piano_roll.disconnect("scroll_changed", callable)
-	if notes_model != null:
-		var notes_callable = Callable(self, "_on_notes_changed")
-		if notes_model.is_connected("changed", notes_callable):
-			notes_model.disconnect("changed", notes_callable)
-	piano_roll = roll
-	if piano_roll and piano_roll.has_signal("scroll_changed"):
-		piano_roll.connect("scroll_changed", Callable(self, "_on_roll_scroll_changed"))
-	notes_model = piano_roll.get_node_or_null("NotesModel") if piano_roll else null
-	if notes_model != null:
-		notes_model.connect("changed", Callable(self, "_on_notes_changed"))
-	if envelope_lane != null and envelope_lane.has_method("set_from_roll"):
-		envelope_lane.call("set_from_roll", piano_roll)
-	var next_panel = piano_roll.get_node_or_null("RollPanel") if piano_roll else null
-	if active_roll_panel != null:
-		var resized_callable = Callable(self, "_on_roll_panel_resized")
-		if active_roll_panel.is_connected("resized", resized_callable):
-			active_roll_panel.disconnect("resized", resized_callable)
-	active_roll_panel = next_panel
-	if active_roll_panel != null:
-		active_roll_panel.connect("resized", Callable(self, "_on_roll_panel_resized"))
-	if h_scroll != null and h_scroll.has_method("set_roll"):
-		h_scroll.call("set_roll", piano_roll)
-	if v_scroll != null and v_scroll.has_method("set_roll"):
-		v_scroll.call("set_roll", piano_roll)
-	_sync_scrollbars()
-	if piano_roll != null:
-		var roll_panel = piano_roll.get_node_or_null("RollPanel") as Control
-		var view_width = roll_panel.size.x if roll_panel else 0.0
-		var scroll_x = float(piano_roll.call("get_scroll_x"))
-		_update_envelope_view(scroll_x, view_width)
-		_restore_envelope_selection()
-
-func _sync_scrollbars() -> void:
-	if piano_roll == null:
-		return
-	var roll_panel = piano_roll.get_node("RollPanel") as Control
-	var view_width = roll_panel.size.x if roll_panel else 0.0
-	var view_height = roll_panel.size.y if roll_panel else 0.0
-	var scroll_x = float(piano_roll.call("get_scroll_x"))
-	var scroll_y = float(piano_roll.call("get_scroll_y"))
-	var max_x = float(piano_roll.call("get_max_scroll_x"))
-	var max_y = float(piano_roll.call("get_max_scroll_y"))
-	_update_scrollbars(scroll_x, scroll_y, max_x, max_y, view_width, view_height)
-	_update_envelope_view(scroll_x, view_width)
-	_update_envelope_panel_limit()
-
-func _update_scrollbars(
-	scroll_x: float,
-	scroll_y: float,
-	max_x: float,
-	max_y: float,
-	view_width: float,
-	view_height: float
-) -> void:
-	updating_scrollbars = true
-	var keyboard_width = 0.0
-	if piano_roll != null and piano_roll.has_method("get_keyboard_width"):
-		keyboard_width = float(piano_roll.call("get_keyboard_width"))
-	if h_scroll_spacer != null:
-		h_scroll_spacer.custom_minimum_size = Vector2(max(0.0, keyboard_width), 0)
-	if envelope_bar_spacer != null:
-		envelope_bar_spacer.custom_minimum_size = Vector2(max(0.0, keyboard_width - 4.0), 0)
-	if envelope_lane_spacer != null:
-		envelope_lane_spacer.custom_minimum_size = Vector2(max(0.0, keyboard_width - 4.0), 0)
-	var right_padding = v_scroll.size.x if v_scroll != null else 0.0
-	if envelope_bar_right_spacer != null:
-		envelope_bar_right_spacer.custom_minimum_size = Vector2(max(0.0, right_padding), 0)
-	if envelope_lane_right_spacer != null:
-		var min_width = right_padding
-		if curve_mode_button != null:
-			min_width = max(min_width, curve_mode_button.custom_minimum_size.x)
-		envelope_lane_right_spacer.custom_minimum_size = Vector2(max(0.0, min_width), 0)
-	h_scroll.min_value = 0.0
-	h_scroll.max_value = max_x
-	h_scroll.page = max(view_width, 0.0)
-	h_scroll.value = clamp(scroll_x, 0.0, max_x)
-	h_scroll.visible = true
-	h_scroll.queue_redraw()
-	v_scroll.min_value = 0.0
-	v_scroll.max_value = max_y
-	v_scroll.page = max(view_height, 0.0)
-	v_scroll.value = clamp(scroll_y, 0.0, max_y)
-	v_scroll.visible = true
-	v_scroll.queue_redraw()
-	updating_scrollbars = false
-
 func _update_browser_toggle_label() -> void:
-	browser_toggle.text = ""
+	if browser_toggle != null:
+		browser_toggle.text = ""
 
-
-func _on_notes_changed() -> void:
-	if h_scroll != null and h_scroll.has_method("queue_redraw"):
-		h_scroll.call("queue_redraw")
-	if v_scroll != null and v_scroll.has_method("queue_redraw"):
-		v_scroll.call("queue_redraw")
-	if envelope_lane != null and envelope_lane.has_method("queue_redraw"):
-		envelope_lane.call("queue_redraw")
-
-func _on_roll_panel_resized() -> void:
-	_sync_scrollbars()
-	_update_envelope_panel_limit()
-
-func _init_envelope_lane() -> void:
-	if envelope_drag_bar != null and envelope_drag_bar.has_method("setup"):
-		envelope_drag_bar.call("setup", envelope_lane)
-	if envelope_drag_bar != null and envelope_drag_bar.has_signal("panel_height_changed"):
-		var height_callable = Callable(self, "_on_envelope_panel_height_changed")
-		if not envelope_drag_bar.is_connected("panel_height_changed", height_callable):
-			envelope_drag_bar.connect("panel_height_changed", height_callable)
-	if envelope_lane != null:
-		if envelope_lane.has_method("set_snap_provider"):
-			envelope_lane.call("set_snap_provider", envelope_drag_bar)
-		envelope_lane.visible = false
-		envelope_lane.custom_minimum_size = Vector2(0.0, 0.0)
-	_set_envelope_panel_controls(false)
-	_update_envelope_panel_limit()
-
-func _update_envelope_panel_limit() -> void:
-	if envelope_drag_bar == null:
+func _on_shared_scroll_pressed() -> void:
+	if shared_scroll_button == null:
 		return
-	if roll_area == null or tab_row == null or h_scroll_row == null or envelope_bar_row == null:
-		return
-	var total_height = roll_area.size.y
-	var reserved = tab_row.size.y + h_scroll_row.size.y + envelope_bar_row.size.y
-	var separation = 0.0
-	if roll_area is VBoxContainer:
-		separation = float((roll_area as VBoxContainer).get_theme_constant("separation"))
-	var row_count = 5.0
-	var spacing = separation * max(0.0, row_count - 1.0)
-	var roll_allowance = 0.0
-	if roll_frame_overlay != null:
-		roll_allowance = float(roll_frame_overlay.get("border_expand")) * 2.0
-	var max_height = max(0.0, total_height - reserved - spacing - roll_allowance)
-	envelope_drag_bar.set("max_panel_height", max_height)
+	shared_scroll_enabled = shared_scroll_button.button_pressed
+	_update_shared_scroll_label()
+	if shared_scroll_enabled:
+		_apply_shared_scroll()
+	else:
+		_clear_shared_scroll()
 
-func _update_envelope_view(scroll_x: float, view_width: float) -> void:
-	if envelope_lane == null or envelope_drag_bar == null or piano_roll == null:
+func _update_shared_scroll_label() -> void:
+	if shared_scroll_button == null:
 		return
-	if envelope_lane.has_method("set_view"):
-		envelope_lane.call("set_view", scroll_x, view_width)
-	if envelope_lane.has_method("set_from_roll"):
-		envelope_lane.call("set_from_roll", piano_roll)
-	var ppb = float(piano_roll.get("pixels_per_beat"))
-	var beats = int(piano_roll.get("visible_beats"))
-	if envelope_drag_bar.has_method("update_from_roll"):
-		envelope_drag_bar.call("update_from_roll", ppb, beats, scroll_x, view_width)
+	shared_scroll_button.text = "Sync"
 
-func _on_envelope_selection_committed(start_beats: float, end_beats: float) -> void:
-	if piano_roll == null:
+func _apply_shared_scroll() -> void:
+	_update_shared_view_beats()
+	var source_slot = active_slot if active_slot != null else panel_slot_a
+	if source_slot == null:
 		return
-	var start_time = min(start_beats, end_beats)
-	piano_roll.call("set_playhead_time", start_time)
-	_store_envelope_selection(start_beats, end_beats)
+	var scroll_x = float(source_slot.call("get_scroll_x"))
+	var target_slot = panel_slot_b if source_slot == panel_slot_a else panel_slot_a
+	if target_slot != null:
+		target_slot.call("set_scroll_x", scroll_x, true)
 
-func _on_envelope_selection_cleared() -> void:
-	if piano_roll == null:
+func _clear_shared_scroll() -> void:
+	if panel_slot_a != null:
+		panel_slot_a.call("clear_shared_view_beats")
+	if panel_slot_b != null:
+		panel_slot_b.call("clear_shared_view_beats")
+
+func _update_shared_view_beats() -> void:
+	if panel_slot_a == null or panel_slot_b == null:
 		return
-	_store_envelope_selection(-1.0, -1.0)
+	var a_len = float(panel_slot_a.call("get_active_clip_length"))
+	var b_len = float(panel_slot_b.call("get_active_clip_length"))
+	var view_beats = int(ceil(max(a_len, b_len)))
+	if view_beats <= 0:
+		view_beats = 1
+	panel_slot_a.call("set_shared_view_beats", view_beats)
+	panel_slot_b.call("set_shared_view_beats", view_beats)
 
 func _on_selection_snap_pressed() -> void:
-	if envelope_drag_bar == null or not envelope_drag_bar.has_method("toggle_snap"):
+	if active_slot == null:
 		return
-	var enabled = bool(envelope_drag_bar.call("toggle_snap"))
+	var enabled = bool(active_slot.call("toggle_snap"))
 	_update_selection_snap_label(enabled)
-
-func _on_envelope_panel_toggled(is_open: bool) -> void:
-	_set_envelope_panel_controls(is_open)
-
-func _on_envelope_panel_height_changed(height: float) -> void:
-	if envelope_lane_overlay != null:
-		envelope_lane_overlay.visible = height > 0.0
 
 func _update_selection_snap_label(force_enabled: Variant = null) -> void:
 	if selection_snap_button == null:
@@ -296,42 +218,150 @@ func _update_selection_snap_label(force_enabled: Variant = null) -> void:
 	var enabled = false
 	if force_enabled is bool:
 		enabled = force_enabled
-	elif envelope_drag_bar != null and envelope_drag_bar.has_method("is_snap_enabled"):
-		enabled = bool(envelope_drag_bar.call("is_snap_enabled"))
+	elif active_slot != null:
+		enabled = bool(active_slot.call("is_snap_enabled"))
 	selection_snap_button.text = ""
 	selection_snap_button.icon = ICON_SNAP_ON if enabled else ICON_SNAP_OFF
 
-func _on_curve_mode_pressed() -> void:
-	if envelope_lane == null or not envelope_lane.has_method("toggle_curve_mode"):
+func _refresh_track_list() -> void:
+	if track_list == null:
 		return
-	var mode = String(envelope_lane.call("toggle_curve_mode"))
-	_update_curve_mode_label(mode)
+	updating_track_list = true
+	track_list.clear()
+	if project_model != null:
+		for i in range(project_model.tracks.size()):
+			var track = project_model.tracks[i]
+			var label = "Track %d" % (i + 1)
+			if track != null:
+				label = str(track.track_name)
+			track_list.add_item(label)
+	updating_track_list = false
+	_sync_track_list_to_active_slot()
 
-func _update_curve_mode_label(force_mode: String = "") -> void:
-	if curve_mode_button == null:
+func _sync_track_list_to_active_slot() -> void:
+	if track_list == null or active_slot == null:
 		return
-	var mode = force_mode
-	if mode == "" and envelope_lane != null:
-		mode = str(envelope_lane.get("curve_mode"))
-	curve_mode_button.text = ""
-	curve_mode_button.icon = ICON_CURVE_BEZIER if mode == "bezier" else ICON_CURVE_LINE
-
-func _set_envelope_panel_controls(is_open: bool) -> void:
-	if curve_mode_button != null:
-		curve_mode_button.visible = is_open
-	if envelope_lane_overlay != null:
-		envelope_lane_overlay.visible = is_open
-
-func _store_envelope_selection(start_beats: float, end_beats: float) -> void:
-	if piano_roll == null:
+	var index = int(active_slot.call("get_active_track_index"))
+	if index < 0 or index >= track_list.get_item_count():
 		return
-	piano_roll.set_meta("envelope_selection_start", start_beats)
-	piano_roll.set_meta("envelope_selection_end", end_beats)
+	updating_track_list = true
+	track_list.select(index)
+	track_list.ensure_current_is_visible()
+	updating_track_list = false
 
-func _restore_envelope_selection() -> void:
-	if piano_roll == null or envelope_drag_bar == null:
+func _on_track_list_selected(index: int) -> void:
+	if updating_track_list or active_slot == null:
 		return
-	var start = float(piano_roll.get_meta("envelope_selection_start", -1.0))
-	var end = float(piano_roll.get_meta("envelope_selection_end", -1.0))
-	if envelope_drag_bar.has_method("set_selection_from_roll"):
-		envelope_drag_bar.call("set_selection_from_roll", start, end)
+	active_slot.call("select_track", index)
+
+func _on_add_track_pressed() -> void:
+	if project_model == null:
+		return
+	var next_index = project_model.tracks.size() + 1
+	project_model.create_track("Track %d" % next_index)
+	_refresh_track_list()
+	if active_slot != null:
+		active_slot.call("select_track", project_model.tracks.size() - 1)
+
+func _on_track_move_up_pressed() -> void:
+	_move_active_track(-1)
+
+func _on_track_move_down_pressed() -> void:
+	_move_active_track(1)
+
+func _move_active_track(delta: int) -> void:
+	if project_model == null or active_slot == null:
+		return
+	var count = project_model.tracks.size()
+	if count <= 1:
+		return
+	var from_index = clamp(int(active_slot.call("get_active_track_index")), 0, count - 1)
+	var to_index = clamp(from_index + delta, 0, count - 1)
+	if from_index == to_index:
+		return
+	var track = project_model.tracks[from_index]
+	project_model.tracks.remove_at(from_index)
+	project_model.tracks.insert(to_index, track)
+	if project_model.has_signal("changed"):
+		project_model.emit_signal("changed")
+	_resync_slots_after_reorder()
+
+func _on_track_remove_pressed() -> void:
+	if project_model == null or active_slot == null:
+		return
+	if project_model.tracks.size() <= 1:
+		return
+	var index = clamp(int(active_slot.call("get_active_track_index")), 0, project_model.tracks.size() - 1)
+	project_model.tracks.remove_at(index)
+	if project_model.tracks.is_empty():
+		project_model.create_track("Track 1")
+	if project_model.has_signal("changed"):
+		project_model.emit_signal("changed")
+	_refresh_track_list()
+	_resync_slots_after_reorder()
+
+func _resync_slots_after_reorder() -> void:
+	for slot in [panel_slot_a, panel_slot_b]:
+		if slot == null:
+			continue
+		var track = slot.call("get_active_track")
+		var index = project_model.tracks.find(track)
+		if index < 0:
+			index = 0
+		slot.call("select_track", index)
+
+func _update_name_edits() -> void:
+	if updating_name_fields:
+		return
+	updating_name_fields = true
+	if track_name_edit != null:
+		var track = active_slot.call("get_active_track") if active_slot != null else null
+		track_name_edit.text = str(track.track_name) if track != null else ""
+	if clip_name_edit != null:
+		var clip = active_slot.call("get_active_clip") if active_slot != null else null
+		if clip == null:
+			clip_name_edit.text = ""
+		else:
+			var label = str(clip.clip_name)
+			if label == "" and active_slot != null:
+				label = "Clip %d" % (int(active_slot.call("get_active_clip_index")) + 1)
+			clip_name_edit.text = label
+	updating_name_fields = false
+
+func _on_track_name_submitted(text: String) -> void:
+	_commit_track_name(text)
+
+func _on_track_name_focus_exited() -> void:
+	if track_name_edit == null:
+		return
+	_commit_track_name(track_name_edit.text)
+
+func _commit_track_name(text: String) -> void:
+	if active_slot == null:
+		return
+	var track_label = text.strip_edges()
+	if track_label == "":
+		track_label = "Track %d" % (int(active_slot.call("get_active_track_index")) + 1)
+	active_slot.call("set_track_name", track_label)
+	_refresh_track_list()
+	_update_name_edits()
+
+func _on_clip_name_submitted(text: String) -> void:
+	_commit_clip_name(text)
+
+func _on_clip_name_focus_exited() -> void:
+	if clip_name_edit == null:
+		return
+	_commit_clip_name(clip_name_edit.text)
+
+func _commit_clip_name(text: String) -> void:
+	if active_slot == null:
+		return
+	var clip_label = text.strip_edges()
+	if clip_label == "":
+		clip_label = "Clip %d" % (int(active_slot.call("get_active_clip_index")) + 1)
+	active_slot.call("set_clip_name", clip_label)
+	_update_name_edits()
+
+func _slot_by_index(slot_index: int) -> Node:
+	return panel_slot_a if slot_index == 0 else panel_slot_b
