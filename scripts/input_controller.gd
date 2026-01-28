@@ -125,7 +125,9 @@ func _try_create_note(local_pos: Vector2) -> bool:
 	var pitch = max_pitch - int(floor(local_pos.y / key_height))
 	if pitch < min_pitch or pitch > max_pitch:
 		return false
-	var start_beats = int(floor(local_pos.x / pixels_per_beat))
+	var start_beats = local_pos.x / pixels_per_beat
+	if snap_enabled:
+		start_beats = _snap_beats(start_beats)
 	_ensure_length(start_beats + 1.0)
 	model.add_note(pitch, start_beats, 1.0)
 	return true

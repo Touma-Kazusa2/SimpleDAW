@@ -1,17 +1,59 @@
 extends Control
 
+signal content_height_changed
+
 @export var pixels_per_beat: float = 120.0
 @export var beats_per_measure: int = 4
 @export var visible_beats: int = 32
 @export var view_scroll_x: float = 0.0
 @export var view_width: float = 0.0
+@export var view_scroll_y: float = 0.0
 
 const COLOR_BG = Color(0.06, 0.06, 0.07)
 const COLOR_GRID = Color(1.0, 1.0, 1.0, 0.08)
 const COLOR_MEASURE = Color(1.0, 1.0, 1.0, 0.18)
-const COLOR_DEFAULT = Color(0.95, 0.55, 0.2, 0.23)
+const COLOR_DEFAULT = Color(0.2, 0.45, 0.9, 0.35)
 const COLOR_CURVE = Color(0.95, 0.55, 0.2, 0.9)
 const COLOR_POINT = Color(0.98, 0.82, 0.25, 1.0)
+const DEFAULT_PARAM := "Volume"
+const PARAM_RANGE_DEFAULT := Vector2(0.0, 1.0)
+const PARAM_RANGE_BY_NAME := {
+	"Pan": Vector2(-1.0, 1.0),
+	"Pitch": Vector2(-12.0, 12.0),
+	"Volume": Vector2(0.0, 1.0),
+	"Expression": Vector2(0.0, 1.0),
+	"ModWheel": Vector2(0.0, 1.0),
+	"ReverbSend": Vector2(0.0, 1.0),
+	"ChorusSend": Vector2(0.0, 1.0),
+	"FilterCutoff": Vector2(0.0, 1.0),
+	"FilterResonance": Vector2(0.0, 1.0),
+	"AttackTime": Vector2(0.0, 1.0),
+	"ReleaseTime": Vector2(0.0, 1.0),
+	"DecayTime": Vector2(0.0, 1.0),
+	"VibratoRate": Vector2(0.0, 1.0),
+	"VibratoDepth": Vector2(0.0, 1.0),
+	"VibratoDelay": Vector2(0.0, 1.0),
+	"PortamentoTime": Vector2(0.0, 1.0),
+	"BreathControl": Vector2(0.0, 1.0)
+}
+const PARAM_RANGE_BY_CC := {
+	1: Vector2(0.0, 1.0),
+	2: Vector2(0.0, 1.0),
+	5: Vector2(0.0, 1.0),
+	7: Vector2(0.0, 1.0),
+	10: Vector2(-1.0, 1.0),
+	11: Vector2(0.0, 1.0),
+	71: Vector2(0.0, 1.0),
+	72: Vector2(0.0, 1.0),
+	73: Vector2(0.0, 1.0),
+	74: Vector2(0.0, 1.0),
+	75: Vector2(0.0, 1.0),
+	76: Vector2(0.0, 1.0),
+	77: Vector2(0.0, 1.0),
+	78: Vector2(0.0, 1.0),
+	91: Vector2(0.0, 1.0),
+	93: Vector2(0.0, 1.0)
+}
 
 var model: Node = null
 var snap_provider: Node = null
@@ -23,12 +65,21 @@ var last_draw_value := 0.0
 var last_delete_time := -1.0
 var curve_mode: String = "line"
 var _redraw_pending := false
+var _zoom_dragging := false
+var _zoom_drag_last_y := 0.0
+var _current_param_name := ""
+var _param_min := 0.0
+var _param_max := 1.0
 
 const DEFAULT_VALUE := 0.5
 const POINT_RADIUS := 3.0
 
 @export var draw_step_beats: float = 0.25
 @export var delete_tolerance_beats: float = 0.15
+@export var value_zoom: float = 1.0
+@export var min_value_zoom: float = 1.0
+@export var max_value_zoom: float = 4.0
+@export var zoom_drag_scale: float = 0.01
 
 func set_from_roll(roll_node: Control) -> void:
 	if roll_node == null:
@@ -64,9 +115,14 @@ func set_view(scroll_x: float, width: float) -> void:
 	view_width = width
 	_request_redraw()
 
+func set_view_scroll_y(scroll_y: float) -> void:
+	view_scroll_y = max(0.0, scroll_y)
+	_request_redraw()
+
 func _draw() -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
+	_sync_param_range(true)
 	draw_rect(Rect2(Vector2.ZERO, size), COLOR_BG, true)
 	_draw_grid()
 	_draw_curve()
@@ -93,15 +149,14 @@ func _draw_grid() -> void:
 		var color = COLOR_MEASURE if beat % max(1, beats_per_measure) == 0 else COLOR_GRID
 		draw_line(Vector2(x, 0.0), Vector2(x, size.y), color, 1.0)
 	for i in range(1, 4):
-		var y = (size.y * i) / 4.0
+		var y = (float(_value_axis_height()) * i) / 4.0 - view_scroll_y
 		draw_line(Vector2(0.0, y), Vector2(clip_width, y), COLOR_GRID, 1.0)
 
 func _draw_default_line() -> void:
 	var value = DEFAULT_VALUE
 	if model != null and model.has_method("get_current_default_value"):
 		value = float(model.call("get_current_default_value"))
-	var t = clamp(value, 0.0, 1.0)
-	var y = (1.0 - t) * size.y
+	var y = _value_to_y(value)
 	var clip_width = size.x
 	if view_width > 0.0:
 		clip_width = min(size.x, view_width)
@@ -122,7 +177,7 @@ func _draw_curve() -> void:
 	var default_value = DEFAULT_VALUE
 	if model.has_method("get_current_default_value"):
 		default_value = float(model.call("get_current_default_value"))
-	var default_y = (1.0 - clamp(default_value, 0.0, 1.0)) * size.y
+	var default_y = _value_to_y(default_value)
 	var prev_pos: Vector2 = Vector2.ZERO
 	var has_prev = false
 	var view_positions: Array = []
@@ -133,7 +188,7 @@ func _draw_curve() -> void:
 		var time_beats = float(entry.get("time", 0.0))
 		var value = float(entry.get("value", DEFAULT_VALUE))
 		var x = time_beats * pixels_per_beat + offset_x
-		var y = (1.0 - clamp(value, 0.0, 1.0)) * size.y
+		var y = _value_to_y(value)
 		var pos = Vector2(x, y)
 		view_positions.append(pos)
 		if not has_any:
@@ -150,16 +205,18 @@ func _draw_curve() -> void:
 			var left_end = clamp(first_x, 0.0, clip_width)
 			if left_end > 0.0:
 				draw_line(Vector2(0.0, default_y), Vector2(left_end, default_y), COLOR_DEFAULT, 2.0)
-			var right_start = clamp(last_x, 0.0, clip_width)
-			if right_start < clip_width:
-				draw_line(Vector2(right_start, default_y), Vector2(clip_width, default_y), COLOR_DEFAULT, 2.0)
+			if view_positions.size() >= 1:
+				var last_pos = view_positions[view_positions.size() - 1] as Vector2
+				var right_start = clamp(last_pos.x, 0.0, clip_width)
+				if right_start < clip_width:
+					var tail_color = COLOR_CURVE
+					if is_equal_approx(last_pos.y, _value_to_y(0.0)):
+						tail_color = COLOR_DEFAULT
+					draw_line(Vector2(right_start, last_pos.y), Vector2(clip_width, last_pos.y), tail_color, 2.0)
 		if view_positions.size() >= 1:
 			var first_pos = view_positions[0] as Vector2
 			if first_pos.x >= -POINT_RADIUS and first_pos.x <= clip_width + POINT_RADIUS:
 				draw_line(Vector2(first_pos.x, first_pos.y), Vector2(first_pos.x, default_y), COLOR_DEFAULT, 2.0)
-			var last_pos = view_positions[view_positions.size() - 1] as Vector2
-			if last_pos.x >= -POINT_RADIUS and last_pos.x <= clip_width + POINT_RADIUS:
-				draw_line(Vector2(last_pos.x, last_pos.y), Vector2(last_pos.x, default_y), COLOR_DEFAULT, 2.0)
 	if curve_mode == "bezier" and view_positions.size() >= 2:
 		_draw_bezier_curve(view_positions, clip_width)
 	else:
@@ -184,6 +241,12 @@ func _gui_input(event: InputEvent) -> void:
 				accept_event()
 				return
 	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_MIDDLE:
+			_zoom_dragging = event.pressed
+			if _zoom_dragging:
+				_zoom_drag_last_y = event.position.y
+			accept_event()
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				is_drawing = true
@@ -203,6 +266,10 @@ func _gui_input(event: InputEvent) -> void:
 				last_delete_time = -1.0
 			accept_event()
 	elif event is InputEventMouseMotion:
+		if _zoom_dragging:
+			_update_zoom_drag(event.position)
+			accept_event()
+			return
 		if is_drawing:
 			_paint_at(event.position)
 			accept_event()
@@ -266,10 +333,12 @@ func _time_from_pos(local_x: float) -> float:
 	return (view_scroll_x + local_x) / pixels_per_beat
 
 func _value_from_pos(local_y: float) -> float:
-	if size.y <= 0.0:
+	var height = _value_axis_height()
+	if height <= 0.0:
 		return DEFAULT_VALUE
-	var t = 1.0 - (local_y / size.y)
-	return clamp(t, 0.0, 1.0)
+	var t = 1.0 - ((local_y + view_scroll_y) / height)
+	var clamped = clamp(t, 0.0, 1.0)
+	return _to_normalized(clamped)
 
 func _get_step_beats() -> float:
 	return draw_step_beats
@@ -278,6 +347,24 @@ func _snap_time(time_beats: float, step: float) -> float:
 	if step <= 0.0:
 		return time_beats
 	return round(time_beats / step) * step
+
+func _value_axis_height() -> float:
+	return max(1.0, size.y * clamp(value_zoom, min_value_zoom, max_value_zoom))
+
+func _value_to_y(value: float) -> float:
+	var height = _value_axis_height()
+	var t = _from_normalized(clamp(value, 0.0, 1.0))
+	return (1.0 - t) * height - view_scroll_y
+
+func _update_zoom_drag(local_pos: Vector2) -> void:
+	var delta = local_pos.y - _zoom_drag_last_y
+	_zoom_drag_last_y = local_pos.y
+	if abs(delta) < 0.001:
+		return
+	var next_zoom = value_zoom + (-delta * zoom_drag_scale)
+	value_zoom = clamp(next_zoom, min_value_zoom, max_value_zoom)
+	emit_signal("content_height_changed")
+	_request_redraw()
 
 func set_curve_mode(mode: String) -> void:
 	if mode != "line" and mode != "bezier":
@@ -290,11 +377,59 @@ func toggle_curve_mode() -> String:
 	_request_redraw()
 	return curve_mode
 
+func get_content_height() -> float:
+	return _value_axis_height()
+
 func _request_redraw() -> void:
 	if _redraw_pending:
 		return
 	_redraw_pending = true
 	call_deferred("_flush_redraw")
+
+func _sync_param_range(reset_view: bool) -> void:
+	if model == null:
+		return
+	var param_name = DEFAULT_PARAM
+	if model.has_method("get_current_param"):
+		param_name = String(model.call("get_current_param"))
+	if param_name == "":
+		param_name = DEFAULT_PARAM
+	if param_name == _current_param_name:
+		return
+	_current_param_name = param_name
+	var param_range = _resolve_param_range(param_name)
+	_param_min = param_range.x
+	_param_max = param_range.y
+	if reset_view:
+		value_zoom = 1.0
+		view_scroll_y = 0.0
+		emit_signal("content_height_changed")
+
+func _resolve_param_range(param_name: String) -> Vector2:
+	if PARAM_RANGE_BY_NAME.has(param_name):
+		return PARAM_RANGE_BY_NAME[param_name]
+	var normalized = param_name.strip_edges()
+	if normalized.begins_with("CC") or normalized.begins_with("cc"):
+		var digits = normalized.replace("CC", "").replace("cc", "")
+		var cc_num = digits.to_int()
+		if PARAM_RANGE_BY_CC.has(cc_num):
+			return PARAM_RANGE_BY_CC[cc_num]
+	var alias = normalized.to_lower()
+	if alias == "mod" or alias == "modulation":
+		return PARAM_RANGE_BY_CC.get(1, PARAM_RANGE_DEFAULT)
+	return PARAM_RANGE_DEFAULT
+
+func _to_normalized(t: float) -> float:
+	var span = _param_max - _param_min
+	if is_equal_approx(span, 0.0):
+		return t
+	return clamp(t, 0.0, 1.0)
+
+func _from_normalized(t: float) -> float:
+	var span = _param_max - _param_min
+	if is_equal_approx(span, 0.0):
+		return t
+	return clamp(t, 0.0, 1.0)
 
 func _flush_redraw() -> void:
 	_redraw_pending = false

@@ -84,6 +84,15 @@ func add_comment(start_beats: float, end_beats: float) -> void:
 		return
 	model.call("add_comment", start_beats, end_beats, "")
 	_request_redraw()
+	call_deferred("_begin_edit_from_range", start_beats, end_beats)
+
+func _begin_edit_from_range(start_beats: float, end_beats: float) -> void:
+	if model == null:
+		return
+	var index = _find_comment_index_by_range(start_beats, end_beats)
+	if index < 0:
+		return
+	_begin_edit(index)
 
 func _gui_input(event: InputEvent) -> void:
 	if model == null:
@@ -208,7 +217,14 @@ func _begin_edit(index: int) -> void:
 func _commit_edit() -> void:
 	if editor == null or editing_index < 0 or model == null or not model.has_method("set_comment_text"):
 		return
-	model.call("set_comment_text", editing_index, editor.text)
+	var next_text = editor.text.strip_edges()
+	if next_text == "":
+		var remove_index = editing_index
+		editor.visible = false
+		editing_index = -1
+		_remove_comment(remove_index)
+		return
+	model.call("set_comment_text", editing_index, next_text)
 	editor.visible = false
 	editing_index = -1
 	_request_redraw()

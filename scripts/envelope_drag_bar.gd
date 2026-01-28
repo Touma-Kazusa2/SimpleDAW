@@ -12,9 +12,12 @@ signal selection_double_clicked(start_beats: float, end_beats: float)
 @export var snap_enabled: bool = true
 @export var max_panel_height: float = -1.0
 @export var allow_panel_resize: bool = true
+@export var min_panel_height: float = 0.0
+@export var allow_panel_collapse: bool = true
 
 var panel: Control = null
 var panel_height: float = 0.0
+var split_container: SplitContainer = null
 
 var pixels_per_beat: float = 120.0
 var visible_beats: int = 32
@@ -35,13 +38,27 @@ var _last_vertical_delta := 0.0
 var _panel_was_open := false
 
 func setup(target_panel: Control) -> void:
+	split_container = null
 	panel = target_panel
 	if panel:
 		panel_height = panel.custom_minimum_size.y
+		if panel_height <= 0.0 and panel.size.y > 0.0:
+			panel_height = panel.size.y
+	queue_redraw()
+
+func setup_split(target_split: SplitContainer) -> void:
+	split_container = target_split
+	panel = null
+	allow_panel_resize = true
+	allow_panel_collapse = false
+	panel_height = _current_panel_height()
 	queue_redraw()
 
 func set_allow_panel_resize(enabled: bool) -> void:
 	allow_panel_resize = enabled
+
+func set_allow_panel_collapse(enabled: bool) -> void:
+	allow_panel_collapse = enabled
 
 func update_from_roll(ppb: float, beats: int, scroll_x: float, width: float) -> void:
 	pixels_per_beat = ppb
@@ -106,15 +123,23 @@ func _update_drag(pos: Vector2) -> void:
 		_update_horizontal_drag(pos.x)
 
 func _update_vertical_drag(local_pos: Vector2) -> void:
+	if split_container != null:
+		var delta_y = local_pos.y - _drag_start_pos.y
+		_last_vertical_delta = delta_y
+		_set_split_offset(_drag_start_height + delta_y)
+		return
 	if panel == null:
 		return
-	var delta_y = local_pos.y - _drag_start_pos.y
-	_last_vertical_delta = delta_y
-	var next_height = max(0.0, _drag_start_height + delta_y)
+	var delta_y_local = local_pos.y - _drag_start_pos.y
+	_last_vertical_delta = delta_y_local
+	var next_height = max(min_panel_height, _drag_start_height + delta_y_local)
 	if max_panel_height > 0.0:
 		next_height = min(next_height, max_panel_height)
 	panel.custom_minimum_size.y = next_height
-	panel.visible = next_height > 0.0
+	var keep_visible = true
+	if allow_panel_collapse:
+		keep_visible = _panel_was_open or next_height > 0.0
+	panel.visible = keep_visible
 	panel_height = next_height
 	emit_signal("panel_height_changed", panel_height)
 	if panel.get_parent() is Control:
@@ -141,15 +166,25 @@ func _finalize_drag(pos: Vector2) -> void:
 		_finalize_horizontal(pos.x)
 
 func _finalize_vertical() -> void:
+	if split_container != null:
+		return
 	if panel == null:
 		return
 	if max_panel_height > 0.0:
 		panel_height = min(panel_height, max_panel_height)
+	panel_height = max(min_panel_height, panel_height)
 	if abs(_last_vertical_delta) < drag_threshold:
 		if _panel_was_open:
 			panel_height = _drag_start_height
 			panel.custom_minimum_size.y = panel_height
-			panel.visible = panel_height > 0.0
+			panel.visible = (panel_height > 0.0) or not allow_panel_collapse
+		return
+	if not allow_panel_collapse:
+		panel.custom_minimum_size.y = panel_height
+		panel.visible = true
+		if panel.get_parent() is Control:
+			(panel.get_parent() as Control).queue_redraw()
+		emit_signal("panel_height_changed", panel_height)
 		return
 	if _panel_was_open:
 		if panel_height <= snap_threshold:
@@ -253,11 +288,29 @@ func _emit_selection_preview(start_beats: float, end_beats: float) -> void:
 	set_selection(start_beats, end_beats)
 
 func _current_panel_height() -> float:
+	if split_container != null:
+		return float(split_container.split_offset)
 	if panel == null:
 		return 0.0
 	if panel.visible:
-		return panel.custom_minimum_size.y
+		var height = panel.custom_minimum_size.y
+		if height <= 0.0 and panel.size.y > 0.0:
+			return panel.size.y
+		return height
 	return 0.0
+
+func _set_split_offset(next_offset: float) -> void:
+	if split_container == null:
+		return
+	var separation_value = float(split_container.get_theme_constant("separation"))
+	var available = max(0.0, split_container.size.y - separation_value)
+	var half = available * 0.5
+	var clamped = clamp(next_offset, -half, half)
+	split_container.split_offset = clamped
+	panel_height = float(split_container.split_offset)
+	emit_signal("panel_height_changed", panel_height)
+	if split_container.get_parent() is Control:
+		(split_container.get_parent() as Control).queue_redraw()
 
 func _get_stable_local(global_pos: Vector2) -> Vector2:
 	var delta_global_x = global_pos.x - _drag_start_global.x
@@ -290,6 +343,12 @@ func _try_emit_double_click(local_x: float) -> void:
 func toggle_snap() -> bool:
 	snap_enabled = !snap_enabled
 	return snap_enabled
+
+func set_snap_enabled(enabled: bool) -> void:
+	snap_enabled = enabled
+
+func set_snap_step(step: float) -> void:
+	snap_step_beats = max(0.0, step)
 
 func is_snap_enabled() -> bool:
 	return snap_enabled

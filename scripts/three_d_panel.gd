@@ -1,5 +1,7 @@
 extends Control
 
+signal camera_changed
+
 @export var target_path: NodePath
 @export var camera_path: NodePath
 
@@ -59,6 +61,7 @@ func _apply_camera() -> void:
 	var z = distance * cos(pitch) * cos(yaw)
 	camera.global_position = target.global_position + Vector3(x, y, z)
 	camera.look_at(target.global_position, Vector3.UP)
+	emit_signal("camera_changed")
 
 func _configure_viewport() -> void:
 	if viewport == null:
@@ -82,15 +85,36 @@ func _apply_layout() -> void:
 	_layout_pending = false
 	if viewport_texture == null:
 		return
-	var base = Vector2(VIEWPORT_BASE.x, VIEWPORT_BASE.y)
-	viewport_texture.size = base
-	var x = (size.x - base.x) * 0.5
-	var y = -view_scroll_y
-	viewport_texture.position = Vector2(x, y)
+	var width = max(1.0, size.x)
+	var height = max(1.0, width * 0.5625)
+	var viewport_size = Vector2(width, height)
+	if viewport != null:
+		viewport.size = Vector2i(int(round(width)), int(round(height)))
+	viewport_texture.size = viewport_size
+	var x = 0.0
+	var base_offset_y = max(0.0, size.y - height)
+	var y = base_offset_y - view_scroll_y
+	viewport_texture.position = Vector2(round(x), round(y))
 
 func get_content_height() -> float:
-	return float(VIEWPORT_BASE.y)
+	var width = max(1.0, size.x)
+	return max(1.0, width * 0.5625)
 
 func set_view_scroll_y(scroll_y: float) -> void:
 	view_scroll_y = max(0.0, scroll_y)
 	_request_layout()
+
+func get_camera_state() -> Dictionary:
+	return {
+		"yaw": yaw,
+		"pitch": pitch,
+		"distance": distance
+	}
+
+func set_camera_state(state: Dictionary) -> void:
+	if state == null:
+		return
+	yaw = float(state.get("yaw", yaw))
+	pitch = float(state.get("pitch", pitch))
+	distance = float(state.get("distance", distance))
+	_apply_camera()

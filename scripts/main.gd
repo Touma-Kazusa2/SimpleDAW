@@ -1,6 +1,7 @@
 extends Control
 
 signal scroll_changed(scroll_x: float, scroll_y: float, max_x: float, max_y: float, view_width: float, view_height: float)
+signal snap_changed(enabled: bool, step: float)
 
 const DEBUG_LOGS := false
 
@@ -13,6 +14,7 @@ const DEBUG_LOGS := false
 @export var visible_beats: int = 32
 @export var keyboard_width: float = 80.0
 @export var input_debug_enabled: bool = false
+@export var enable_local_space_playback: bool = true
 
 const MIN_KEY_HEIGHT := 8.0
 const MAX_KEY_HEIGHT := 40.0
@@ -179,7 +181,8 @@ func _input(event: InputEvent) -> void:
 			_set_scroll_y(scroll_y + SCROLL_STEP_Y)
 			_print_scroll_state("down")
 		elif event.pressed and event.keycode == KEY_SPACE:
-			is_playing = !is_playing
+			if enable_local_space_playback:
+				is_playing = !is_playing
 		elif event.pressed and event.keycode == KEY_HOME:
 			is_playing = false
 			_set_playhead_time(0.0)
@@ -195,6 +198,7 @@ func _input(event: InputEvent) -> void:
 			else:
 				if DEBUG_LOGS:
 					print("Snap off")
+			emit_signal("snap_changed", enabled, input_controller.get_snap_step())
 		elif event.pressed and event.keycode == KEY_K:
 			visible_beats += beats_per_measure * 4
 			_apply_config()
@@ -223,6 +227,9 @@ func _set_playhead_time(time_beats: float) -> void:
 
 func set_playhead_time(time_beats: float) -> void:
 	_set_playhead_time(time_beats)
+
+func get_playhead_time_beats() -> float:
+	return current_time_beats
 
 func _set_scroll_x(value: float) -> void:
 	_set_scroll_position(value, scroll_y)

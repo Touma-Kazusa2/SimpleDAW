@@ -1,28 +1,19 @@
-[gd_scene load_steps=21 format=3 uid="uid://dekhk22v688yc"]
+[gd_scene load_steps=13 format=3 uid="uid://dekhk22v688yc"]
 
-[ext_resource type="PackedScene" uid="uid://drjc5r8avo8up" path="res://piano_roll.tscn" id="1_pianoroll"]
 [ext_resource type="Script" uid="uid://cytpii3o37did" path="res://scripts/simple_daw.gd" id="2_simple_daw"]
-[ext_resource type="Script" uid="uid://kvy5pagfy4cu" path="res://scripts/custom_scrollbar.gd" id="3_custom_scrollbar"]
 [ext_resource type="Script" uid="uid://22283bxyyskv" path="res://scripts/envelope_drag_bar.gd" id="4_envelope_drag_bar"]
-[ext_resource type="Script" uid="uid://cbanr2patqo0k" path="res://scripts/envelope_lane.gd" id="5_envelope_lane"]
 [ext_resource type="Texture2D" uid="uid://c4a8m7k66wliu" path="res://Lucid V1.2/PNG/Flat/16/Folder-Music.png" id="6_browser_icon"]
-[ext_resource type="Script" uid="uid://bdx61n2e7rati" path="res://scripts/comment_lane.gd" id="6_comment_lane"]
 [ext_resource type="Texture2D" uid="uid://di48c8q0cxsvx" path="res://Lucid V1.2/PNG/Flat/16/Play.png" id="7_play_icon"]
-[ext_resource type="Script" uid="uid://bqh5y2bax0e2o" path="res://scripts/three_d_panel.gd" id="7_three_d_panel"]
 [ext_resource type="Texture2D" uid="uid://bmcwnpqih3jwv" path="res://Lucid V1.2/PNG/Flat/16/Pause.png" id="8_pause_icon"]
 [ext_resource type="Texture2D" uid="uid://juscytj3tkih" path="res://Lucid V1.2/PNG/Flat/16/Power.png" id="9_stop_icon"]
 [ext_resource type="Texture2D" uid="uid://su0dyqmdmvq5" path="res://Lucid V1.2/PNG/Flat/16/Plus.png" id="10_add_icon"]
-[ext_resource type="Texture2D" uid="uid://bwqxkhrqu4hh1" path="res://Lucid V1.2/PNG/Flat/16/Grid.png" id="11_snap_on"]
-[ext_resource type="Texture2D" uid="uid://cj2a3p6v2cfa4" path="res://Lucid V1.2/PNG/Flat/16/Signal-1.png" id="13_curve_line"]
 [ext_resource type="Script" uid="uid://fgqodr12wueh" path="res://scripts/overlay_frame.gd" id="16_overlay_frame"]
-[ext_resource type="Texture2D" uid="uid://bd1uyjwv0h8cd" path="res://Lucid V1.2/PNG/Flat/16/Message.png" id="17_comment_icon"]
-[ext_resource type="Script" uid="uid://fx4yezwx8t5xm" path="res://scripts/arrangement_lane.gd" id="18_arrangement_lane"]
-[ext_resource type="PackedScene" uid="uid://a6s3r3p6oyp2n" path="res://panel_slot.tscn" id="19_panel_slot"]
+[ext_resource type="PackedScene" uid="uid://6s3r3p6oyp2n" path="res://panel_slot.tscn" id="19_panel_slot"]
+[ext_resource type="Script" uid="uid://667x44dlgp4s" path="res://scripts/browser_track_tree.gd" id="20_browser_tree"]
+[ext_resource type="Script" uid="uid://bf1vnufu7na6x" path="res://addons/midi/MidiPlayer.gd" id="21_midi_player"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_Clear"]
 bg_color = Color(0, 0, 0, 0)
-
-[sub_resource type="BoxMesh" id="BoxMesh_1"]
 
 [node name="SimpleDAW" type="Control"]
 layout_mode = 3
@@ -65,11 +56,66 @@ layout_mode = 2
 focus_mode = 0
 icon = ExtResource("10_add_icon")
 
+[node name="ImportMidiButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(50, 36)
+layout_mode = 2
+tooltip_text = "Import MIDI"
+focus_mode = 0
+text = "MIDI"
+
+[node name="MidiDeviceOption" type="OptionButton" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(180, 32)
+layout_mode = 2
+focus_mode = 0
+
+[node name="MidiRefreshButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(60, 32)
+layout_mode = 2
+focus_mode = 0
+text = "Refresh"
+
 [node name="SharedScrollButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
 custom_minimum_size = Vector2(44, 36)
 layout_mode = 2
 focus_mode = 0
 text = "Sync"
+
+[node name="PlayButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(40, 36)
+layout_mode = 2
+focus_mode = 0
+icon = ExtResource("7_play_icon")
+
+[node name="PauseButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(40, 36)
+layout_mode = 2
+focus_mode = 0
+icon = ExtResource("8_pause_icon")
+
+[node name="StopButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(40, 36)
+layout_mode = 2
+focus_mode = 0
+icon = ExtResource("9_stop_icon")
+
+[node name="RecordButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(44, 36)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "Rec"
+
+[node name="PanelAModeButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 2
+focus_mode = 0
+text = "A"
+
+[node name="PanelBModeButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 2
+focus_mode = 0
+text = "B"
 
 [node name="TrackNameEdit" type="LineEdit" parent="RootLayout/TopBar/TopBarContent"]
 custom_minimum_size = Vector2(140, 32)
@@ -107,69 +153,16 @@ text = "Browser"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="TrackList" type="ItemList" parent="RootLayout/MainSplit/BrowserPanel/BrowserContent"]
+[node name="TrackTree" type="Tree" parent="RootLayout/MainSplit/BrowserPanel/BrowserContent"]
 layout_mode = 2
 size_flags_vertical = 3
-
-[node name="TrackButtons" type="HBoxContainer" parent="RootLayout/MainSplit/BrowserPanel/BrowserContent"]
-layout_mode = 2
-
-[node name="TrackUpButton" type="Button" parent="RootLayout/MainSplit/BrowserPanel/BrowserContent/TrackButtons"]
-custom_minimum_size = Vector2(36, 28)
-layout_mode = 2
-text = "Up"
-
-[node name="TrackDownButton" type="Button" parent="RootLayout/MainSplit/BrowserPanel/BrowserContent/TrackButtons"]
-custom_minimum_size = Vector2(36, 28)
-layout_mode = 2
-text = "Down"
-
-[node name="TrackRemoveButton" type="Button" parent="RootLayout/MainSplit/BrowserPanel/BrowserContent/TrackButtons"]
-custom_minimum_size = Vector2(54, 28)
-layout_mode = 2
-text = "Remove"
+hide_root = true
+script = ExtResource("20_browser_tree")
 
 [node name="RightSplit" type="VSplitContainer" parent="RootLayout/MainSplit"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-
-[node name="TransportPanel" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit"]
-custom_minimum_size = Vector2(0, 120)
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="TransportBar" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/TransportPanel"]
-layout_mode = 2
-
-[node name="TransportLabel" type="Label" parent="RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Transport"
-
-[node name="PlayButton" type="Button" parent="RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar"]
-custom_minimum_size = Vector2(40, 36)
-layout_mode = 2
-focus_mode = 0
-icon = ExtResource("7_play_icon")
-
-[node name="PauseButton" type="Button" parent="RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar"]
-custom_minimum_size = Vector2(40, 36)
-layout_mode = 2
-focus_mode = 0
-icon = ExtResource("8_pause_icon")
-
-[node name="StopButton" type="Button" parent="RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar"]
-custom_minimum_size = Vector2(40, 36)
-layout_mode = 2
-focus_mode = 0
-icon = ExtResource("9_stop_icon")
-
-[node name="SelectionSnapButton" type="Button" parent="RootLayout/MainSplit/RightSplit/TransportPanel/TransportBar"]
-custom_minimum_size = Vector2(36, 36)
-layout_mode = 2
-focus_mode = 0
-icon = ExtResource("11_snap_on")
 
 [node name="PianoRollPanel" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit"]
 layout_mode = 2
@@ -180,19 +173,113 @@ size_flags_vertical = 3
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="PanelSplit" type="VSplitContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
+[node name="PanelSplit" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea"]
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="PanelSplitContainer" type="VSplitContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="PanelSlotA" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit" instance=ExtResource("19_panel_slot")]
+[node name="PanelSlotA" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/PanelSplitContainer" instance=ExtResource("19_panel_slot")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-slot_index = 0
 
-[node name="PanelSlotB" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit" instance=ExtResource("19_panel_slot")]
+[node name="PanelSlotB" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/PanelSplitContainer" instance=ExtResource("19_panel_slot")]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
 slot_index = 1
+
+[node name="SelectionBarRow" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit"]
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+size_flags_horizontal = 3
+
+[node name="SelectionBarSpacer" type="HBoxContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+alignment = 2
+
+[node name="HistoryBackButton" type="Button" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarSpacer"]
+custom_minimum_size = Vector2(22, 16)
+layout_mode = 2
+
+[node name="HistoryForwardButton" type="Button" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarSpacer"]
+custom_minimum_size = Vector2(22, 16)
+layout_mode = 2
+
+[node name="SelectionBarFrame" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_Clear")
+
+[node name="SelectionBar" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarFrame"]
+clip_contents = true
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
+size_flags_horizontal = 3
+script = ExtResource("4_envelope_drag_bar")
+
+[node name="SelectionBarOverlay" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarFrame"]
+layout_mode = 2
+script = ExtResource("16_overlay_frame")
+border_width = 2.0
+border_expand = 2.0
+
+[node name="SelectionBarRightSpacer" type="Control" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow"]
+layout_mode = 2
+
+[node name="LoadingOverlay" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 2
+mouse_filter = 2
+
+[node name="LoadingDim" type="ColorRect" parent="LoadingOverlay"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="LoadingCenter" type="CenterContainer" parent="LoadingOverlay"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="LoadingBox" type="VBoxContainer" parent="LoadingOverlay/LoadingCenter"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+alignment = 1
+
+[node name="LoadingLabel" type="Label" parent="LoadingOverlay/LoadingCenter/LoadingBox"]
+layout_mode = 2
+text = "loading"
+horizontal_alignment = 1
+
+[node name="LoadingBar" type="ProgressBar" parent="LoadingOverlay/LoadingCenter/LoadingBox"]
+custom_minimum_size = Vector2(360, 18)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MidiImportDialog" type="FileDialog" parent="."]
+
+[node name="SoundFontDialog" type="FileDialog" parent="."]
+
+[node name="MidiPlayer" type="Node" parent="."]
+script = ExtResource("21_midi_player")

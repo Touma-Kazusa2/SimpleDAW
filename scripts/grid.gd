@@ -13,6 +13,7 @@ extends Control
 @export var view_height: float = 0.0
 
 const COLOR_BG = Color(0.08, 0.08, 0.09)
+const COLOR_BG_MEASURE_ALT = Color(0.1, 0.1, 0.12)
 const COLOR_GRID = Color(0.2, 0.2, 0.22)
 const COLOR_MEASURE = Color(0.6, 0.6, 0.63)
 const COLOR_OCTAVE = Color(0.62, 0.62, 0.66)
@@ -34,6 +35,25 @@ func _draw() -> void:
 	if draw_x1 <= draw_x0 or draw_y1 <= draw_y0:
 		return
 	draw_rect(Rect2(Vector2(draw_x0, draw_y0), Vector2(draw_x1 - draw_x0, draw_y1 - draw_y0)), COLOR_BG, true)
+
+	var measure_beats = max(1, beats_per_measure)
+	var measure_width = measure_beats * pixels_per_beat
+	if measure_width > 0.0:
+		var measure_start = int(floor(draw_x0 / measure_width))
+		var measure_end = int(ceil(draw_x1 / measure_width))
+		for measure_index in range(measure_start, measure_end + 1):
+			if measure_index % 2 == 0:
+				continue
+			var x0 = measure_index * measure_width
+			var x1 = x0 + measure_width
+			var rect_x0 = max(draw_x0, x0)
+			var rect_x1 = min(draw_x1, x1)
+			if rect_x1 > rect_x0:
+				draw_rect(
+					Rect2(Vector2(rect_x0, draw_y0), Vector2(rect_x1 - rect_x0, draw_y1 - draw_y0)),
+					COLOR_BG_MEASURE_ALT,
+					true
+				)
 
 	var beat_start = int(floor(draw_x0 / pixels_per_beat))
 	var beat_end = int(ceil(draw_x1 / pixels_per_beat))

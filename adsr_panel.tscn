@@ -1,0 +1,198 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/adsr_panel.gd" id="1_adsr_panel"]
+[ext_resource type="Script" path="res://scripts/adsr_graph.gd" id="2_adsr_graph"]
+[ext_resource type="Script" path="res://scripts/envelope_lane.gd" id="3_envelope_lane"]
+
+[node name="AdsrPanel" type="Control"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_adsr_panel")
+
+[node name="ScrollClip" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+clip_contents = true
+
+[node name="Content" type="Control" parent="ScrollClip"]
+layout_mode = 0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+
+[node name="Layout" type="VBoxContainer" parent="ScrollClip/Content"]
+layout_mode = 0
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+theme_override_constants/separation = 6
+
+[node name="TopRow" type="HBoxContainer" parent="ScrollClip/Content/Layout"]
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="AdsrGraph" type="Control" parent="ScrollClip/Content/Layout/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_minimum_size = Vector2(200, 120)
+script = ExtResource("2_adsr_graph")
+
+[node name="ControlColumn" type="VBoxContainer" parent="ScrollClip/Content/Layout/TopRow"]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="EnableRow" type="HBoxContainer" parent="ScrollClip/Content/Layout/TopRow/ControlColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="EnableToggle" type="CheckBox" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/EnableRow"]
+layout_mode = 2
+text = "Enable ADSR"
+
+[node name="AttackRow" type="HBoxContainer" parent="ScrollClip/Content/Layout/TopRow/ControlColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AttackLabel" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/AttackRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(16, 0)
+text = "A"
+
+[node name="AttackSlider" type="HSlider" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/AttackRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.001
+
+[node name="AttackValue" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/AttackRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(56, 0)
+text = "0.00s"
+
+[node name="DecayRow" type="HBoxContainer" parent="ScrollClip/Content/Layout/TopRow/ControlColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DecayLabel" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/DecayRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(16, 0)
+text = "D"
+
+[node name="DecaySlider" type="HSlider" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/DecayRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.001
+
+[node name="DecayValue" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/DecayRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(56, 0)
+text = "0.00s"
+
+[node name="SustainRow" type="HBoxContainer" parent="ScrollClip/Content/Layout/TopRow/ControlColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="SustainLabel" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/SustainRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(16, 0)
+text = "S"
+
+[node name="SustainSlider" type="HSlider" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/SustainRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.001
+
+[node name="SustainValue" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/SustainRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(56, 0)
+text = "-80dB"
+
+[node name="ReleaseRow" type="HBoxContainer" parent="ScrollClip/Content/Layout/TopRow/ControlColumn"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ReleaseLabel" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/ReleaseRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(16, 0)
+text = "R"
+
+[node name="ReleaseSlider" type="HSlider" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/ReleaseRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 1.0
+step = 0.001
+
+[node name="ReleaseValue" type="Label" parent="ScrollClip/Content/Layout/TopRow/ControlColumn/ReleaseRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(56, 0)
+text = "0.00s"
+
+[node name="ZoneHeader" type="HBoxContainer" parent="ScrollClip/Content/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ZoneLabel" type="Label" parent="ScrollClip/Content/Layout/ZoneHeader"]
+layout_mode = 2
+custom_minimum_size = Vector2(44, 0)
+text = "Zones"
+
+[node name="ZoneSpacer" type="Control" parent="ScrollClip/Content/Layout/ZoneHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ZoneFrame" type="PanelContainer" parent="ScrollClip/Content/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 120)
+
+[node name="ZoneTree" type="Tree" parent="ScrollClip/Content/Layout/ZoneFrame"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+hide_root = true
+
+[node name="AutomationHeader" type="HBoxContainer" parent="ScrollClip/Content/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AutomationLabel" type="Label" parent="ScrollClip/Content/Layout/AutomationHeader"]
+layout_mode = 2
+custom_minimum_size = Vector2(36, 0)
+text = "Auto"
+
+[node name="ParamSelect" type="OptionButton" parent="ScrollClip/Content/Layout/AutomationHeader"]
+layout_mode = 2
+custom_minimum_size = Vector2(140, 24)
+
+[node name="AutomationSpacer" type="Control" parent="ScrollClip/Content/Layout/AutomationHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="AutomationFrame" type="PanelContainer" parent="ScrollClip/Content/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 160)
+
+[node name="AutomationLane" type="Control" parent="ScrollClip/Content/Layout/AutomationFrame"]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("3_envelope_lane")

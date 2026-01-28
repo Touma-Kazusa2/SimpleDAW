@@ -17,11 +17,27 @@ func get_current_default_value() -> float:
 func set_current_param(param_name: String) -> bool:
 	if clip != null and clip.has_method("set_current_param"):
 		return bool(clip.call("set_current_param", param_name))
-	if param_name != DEFAULT_PARAM:
+	if param_name == "":
 		return false
 	current_param = param_name
 	emit_signal("changed")
 	return true
+
+func get_current_param() -> String:
+	if clip != null and clip.has_method("get_current_param"):
+		return String(clip.call("get_current_param"))
+	return current_param
+
+func get_param_names() -> Array:
+	if clip != null and clip.has_method("get_param_names"):
+		return clip.call("get_param_names")
+	if current_param == "":
+		return [DEFAULT_PARAM]
+	return [current_param]
+
+func ensure_param(param_name: String) -> void:
+	if clip != null and clip.has_method("ensure_param"):
+		clip.call("ensure_param", param_name)
 
 func get_points() -> Array:
 	if clip != null and clip.has_method("get_points"):
