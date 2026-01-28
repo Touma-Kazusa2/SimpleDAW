@@ -41,6 +41,40 @@
   修改过1次: OptionButton 放入固定宽度容器并开启省略显示，避免撑开；文件: scripts/panel_slot.gd, panel_slot.tscn
 - 9 3D面板初始化时右侧滑动条是拉满的,无法滑动,但其并没有到达高度上限,在第二次进入3D面板或者其他方法可以恢复
   修改过2次: 使用首次进入标记(_3d_first_entry)重置 scroll_y 并延迟刷新，让滚动条落到底部；文件: scripts/panel_slot.gd
+- 10 轨道面板在最上放画出 tempo map
+  - 状态: 已解决
+  - 问题描述: 参考 ADSR 面板；tempo map 曲线画在上方；提供按钮控制显示/隐藏；UI 设计需调整
+  - 用户原话: 已剪切至 `resolved_user_quotes/10_轨道面板tempo_map.md`
+  修改过2次: 增加 tempo map 绘制+开关并改为随纵向滚动的槽位、增大默认高度；scripts/arrangement_lane.gd, panel_slot.tscn, scripts/panel_slot.gd; arrangement_lane._draw_tempo_map/_draw_tempo_grid/set_show_tempo_map/_content_top/_tempo_map_height/_get_lane_rect, panel_slot._on_tempo_map_toggle_toggled/_sync_tempo_map_toggle
+  修改过3次: tempo map 支持绘制/删除/缩放并将开关移至面板顶栏；scripts/arrangement_lane.gd, panel_slot.tscn, scripts/panel_slot.gd; arrangement_lane._handle_tempo_map_input/_tempo_draw_at/_tempo_delete_at/_tempo_update_zoom_drag/_set_tempo_point, panel_slot._update_arrangement_controls_visibility
+  修改过4次: tempo map 开关改为槽位内 header（ADSR 风格），绘制区域位于 header 下；scripts/arrangement_lane.gd, panel_slot.tscn, scripts/panel_slot.gd; arrangement_lane._update_tempo_header_layout/_tempo_slot_height/_tempo_map_rect, panel_slot.tscn TempoHeader/TempoToggle
+  修改过5次: tempo map 网格线起点对齐轨道网格；scripts/arrangement_lane.gd; arrangement_lane._draw_tempo_grid
+  修改过6次: tempo map 增加水平网格线与底部分隔条；scripts/arrangement_lane.gd; arrangement_lane._draw_tempo_grid/_draw_tempo_map/_tempo_slot_height
+  修改过7次: tempo map 槽位整体改为灰色背景；scripts/arrangement_lane.gd; arrangement_lane._draw_tempo_map
+  修改过8次: tempo map 增加橙色边框与滚动调试输出；scripts/arrangement_lane.gd; arrangement_lane._draw_tempo_map/set_view_scroll_y
+  修改过9次: 轨道滚动视口高度扣除 tempo 槽位，修正无法滚到底部；scripts/arrangement_lane.gd; arrangement_lane.set_view_scroll_y
+  修改过10次: panel scrollbar 使用 arrangement 可视高度，调整滚动到底问题；scripts/arrangement_lane.gd, scripts/panel_slot.gd; arrangement_lane.get_view_height, panel_slot._update_panel_scrollbar
+  修改过11次: 增加滚动内容度量调试输出；scripts/arrangement_lane.gd; arrangement_lane._print_scroll_metrics
+  修改过12次: content_height 改为仅轨道内容+底部 padding（避免滚动上限失真）；scripts/arrangement_lane.gd; arrangement_lane.get_content_height
+  修改过13次: 布局变化后延迟刷新 panel/arrangement 滚动条，避免切换/全屏后滚动范围未更新；scripts/panel_slot.gd; panel_slot._queue_layout_refresh/_apply_layout_refresh/_on_slot_resized/_on_arrangement_lane_resized/_apply_panel_mode
+  修改过14次: 移除滚动调试输出；scripts/arrangement_lane.gd; arrangement_lane.set_view_scroll_y/_print_scroll_metrics
+- 11 轨道面板内双击某个 clip 后,非活动面板进入钢琴卷帘,和同步按钮类似; 鼠标悬浮 clip 时其框变白色
+  - 状态: 已解决
+  - 问题描述: 仅两块面板 A/B；必有一个为活动面板；双击 clip 使非活动面板进入钢琴卷帘（类似同步按钮）；鼠标悬浮 clip 时边框变白
+  - 用户原话: 已剪切至 `resolved_user_quotes/11_轨道面板双击clip.md`
+  修改过2次: 双击 clip 进入另一面板并同步点击时间/音高；hover 边框高亮；scripts/arrangement_lane.gd, scripts/panel_slot.gd, scripts/simple_daw.gd; arrangement_lane._gui_input/_update_hover_clip/_time_for_clip_pos/_pitch_for_clip_pos, panel_slot._on_arrangement_clip_double_clicked, simple_daw._on_arrangement_clip_double_clicked
+- 15 轨道面板 clip 有半透明背景,颜色为其框的颜色,并且删除轨道的背景半透明
+  - 状态: 已解决
+  - 问题描述: clip 背景半透明且颜色为边框色；删除轨道的背景半透明指轨道行背景
+  - 用户原话: 已剪切至 `resolved_user_quotes/15_轨道面板clip半透明.md`
+  修改过1次: clip 半透明填充使用边框色；轨道行背景半透明；scripts/arrangement_lane.gd; arrangement_lane._draw_track_clips/_draw_tracks
+  修改过2次: 轨道行背景恢复不透明；clip 填充透明度更淡；scripts/arrangement_lane.gd; arrangement_lane._draw_track_clips/_draw_tracks
+  修改过3次: 轨道行背景完全不画（alpha=0）；clip 填充更淡；scripts/arrangement_lane.gd; arrangement_lane._draw_track_clips/_draw_tracks
+- 16 按住中间改变纵向拉伸应该只对活动面板有效
+  - 状态: 已解决
+  - 问题描述: 中键纵向拉伸仅对活动面板生效；已有活动面板概念
+  - 用户原话: 已剪切至 `resolved_user_quotes/16_中键纵向拉伸仅活动面板.md`
+  修改过1次: 中键纵向拉伸仅在活动面板响应；scripts/main.gd, scripts/envelope_lane.gd, scripts/panel_slot.gd; main._input/set_input_active, envelope_lane._gui_input/set_input_active, panel_slot._apply_input_active/set_focus_highlight
 - 8 轨道面板 选区应该直接画一整个框,而非根据轨道分割,网格线同理,选区条在轨道面板水平移动后没有立即刷新
   修改过1次: 选区/网格改为全轨道绘制，并在arrangement水平滚动时发scroll_x_changed刷新selection bar；文件: scripts/arrangement_lane.gd, scripts/panel_slot.gd
   - 用户原话: 已剪切至 `resolved_user_quotes/8_轨道面板选区网格刷新.md`

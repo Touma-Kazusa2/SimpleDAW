@@ -388,8 +388,8 @@ func _format_zone_label(zone: Dictionary) -> String:
 func _note_label(key: int) -> String:
 	var clamped = clamp(key, 0, 127)
 	var octave = int(floor(clamped / 12.0)) - 1
-	var name = NOTE_NAMES[int(clamped % 12)]
-	return "%s%d" % [name, octave]
+	var note_name = NOTE_NAMES[int(clamped % 12)]
+	return "%s%d" % [note_name, octave]
 
 func _set_controls_enabled(enabled: bool) -> void:
 	if attack_slider != null:

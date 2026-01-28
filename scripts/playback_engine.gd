@@ -304,6 +304,8 @@ func _capture_model_data() -> Dictionary:
 		}
 		if track.has_method("get"):
 			track_data["track_name"] = str(track.get("track_name"))
+			track_data["is_muted"] = bool(track.get("is_muted"))
+			track_data["is_solo"] = bool(track.get("is_solo"))
 		if track.has_method("has_adsr_override"):
 			track_data["adsr_override"] = bool(track.call("has_adsr_override"))
 		if track.has_method("get_adsr_defaults"):

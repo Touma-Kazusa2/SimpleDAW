@@ -6,6 +6,7 @@ signal track_changed(slot_index: int, track_index: int)
 signal clip_changed(slot_index: int, clip_index: int)
 signal arrangement_selection_preview(slot_index: int, start_beats: float, end_beats: float)
 signal arrangement_selection_committed(slot_index: int, start_beats: float, end_beats: float)
+signal arrangement_clip_double_clicked(slot_index: int, track_index: int, clip_index: int, time_beats: float, pitch: float)
 signal snap_changed(slot_index: int, enabled: bool, step: float)
 
 const PIANO_ROLL_SCENE = preload("res://piano_roll.tscn")
@@ -122,6 +123,7 @@ var history_suppress := false
 var envelope_param_names: Array = []
 var _updating_track_selector := false
 var _updating_tab_bar := false
+var _pending_layout_refresh := false
 
 func _ready() -> void:
 	_ensure_roll()
@@ -175,14 +177,28 @@ func _on_slot_resized() -> void:
 		_update_piano_scrollbar()
 	if panel_mode == "adsr":
 		_update_adsr_scrollbar()
+	_queue_layout_refresh()
 	if not suppress_scroll_signal:
 		emit_signal("scroll_x_changed", slot_index, get_scroll_x(), get_view_width())
+
+func _on_arrangement_lane_resized() -> void:
+	_queue_layout_refresh()
 
 func refresh_layout_metrics() -> void:
 	_update_h_scroll_visibility(size.y)
 	_update_panel_scrollbar()
 	if arrangement_lane != null:
 		_update_arrangement_scrollbar()
+
+func _queue_layout_refresh() -> void:
+	if _pending_layout_refresh:
+		return
+	_pending_layout_refresh = true
+	call_deferred("_apply_layout_refresh")
+
+func _apply_layout_refresh() -> void:
+	_pending_layout_refresh = false
+	refresh_layout_metrics()
 
 func update_h_scroll_visibility_for_height(panel_height: float, _allow_unhide: bool = true) -> void:
 	_update_h_scroll_visibility(panel_height)
@@ -338,6 +354,10 @@ func _init_controls() -> void:
 			var clip_callable = Callable(self, "_on_arrangement_clip_selected")
 			if not arrangement_lane.is_connected("clip_selected", clip_callable):
 				arrangement_lane.connect("clip_selected", clip_callable)
+		if arrangement_lane.has_signal("clip_double_clicked"):
+			var double_callable = Callable(self, "_on_arrangement_clip_double_clicked")
+			if not arrangement_lane.is_connected("clip_double_clicked", double_callable):
+				arrangement_lane.connect("clip_double_clicked", double_callable)
 		if arrangement_lane.has_signal("track_selected"):
 			var track_callable = Callable(self, "_on_arrangement_track_selected")
 			if not arrangement_lane.is_connected("track_selected", track_callable):
@@ -366,6 +386,10 @@ func _init_controls() -> void:
 			var scroll_callable = Callable(self, "_on_arrangement_scroll_request")
 			if not arrangement_lane.is_connected("scroll_request", scroll_callable):
 				arrangement_lane.connect("scroll_request", scroll_callable)
+		if arrangement_lane.has_signal("resized"):
+			var resize_callable = Callable(self, "_on_arrangement_lane_resized")
+			if not arrangement_lane.is_connected("resized", resize_callable):
+				arrangement_lane.connect("resized", resize_callable)
 	if step_lane != null and step_lane.has_signal("config_changed"):
 		var config_callable = Callable(self, "_on_step_config_changed")
 		if not step_lane.is_connected("config_changed", config_callable):
@@ -732,6 +756,9 @@ func _on_arrangement_selection_preview(start_beats: float, end_beats: float) -> 
 func _on_arrangement_selection_committed(start_beats: float, end_beats: float) -> void:
 	emit_signal("arrangement_selection_committed", slot_index, start_beats, end_beats)
 
+func _on_arrangement_clip_double_clicked(track_index: int, clip_index: int, time_beats: float, pitch: float) -> void:
+	emit_signal("arrangement_clip_double_clicked", slot_index, track_index, clip_index, time_beats, pitch)
+
 func _on_arrangement_zoom_request(local_x: float, direction: int) -> void:
 	if arrangement_lane == null:
 		return
@@ -786,7 +813,11 @@ func _on_arrangement_scroll_request(delta_x: float, delta_y: float) -> void:
 	if delta_y != 0.0:
 		if panel_row == null or panel_v_scroll == null or arrangement_lane == null:
 			return
-		var view_height = arrangement_lane.size.y if arrangement_lane.size.y > 0.0 else panel_row.size.y
+		var view_height = panel_row.size.y
+		if arrangement_lane.has_method("get_view_height"):
+			view_height = float(arrangement_lane.call("get_view_height"))
+		elif arrangement_lane.size.y > 0.0:
+			view_height = arrangement_lane.size.y
 		var content_height = 0.0
 		if arrangement_lane.has_method("get_content_height"):
 			content_height = float(arrangement_lane.call("get_content_height"))
@@ -1170,8 +1201,11 @@ func _update_panel_scrollbar() -> void:
 	var view_height = panel_row.size.y
 	if panel_mode == "3d" and panel_frame != null and panel_frame.size.y > 0.0:
 		view_height = panel_frame.size.y
-	if panel_mode == "arrangement" and arrangement_lane != null and arrangement_lane.size.y > 0.0:
-		view_height = arrangement_lane.size.y
+	if panel_mode == "arrangement" and arrangement_lane != null:
+		if arrangement_lane.has_method("get_view_height"):
+			view_height = float(arrangement_lane.call("get_view_height"))
+		elif arrangement_lane.size.y > 0.0:
+			view_height = arrangement_lane.size.y
 	if view_height <= 0.0:
 		updating_panel_scroll = true
 		_set_current_panel_scroll_y(0.0)
@@ -1283,6 +1317,7 @@ func _apply_panel_mode() -> void:
 		_update_adsr_scrollbar()
 	if panel_mode == "piano":
 		_update_piano_scrollbar()
+	_queue_layout_refresh()
 	if not suppress_scroll_signal:
 		emit_signal("scroll_x_changed", slot_index, get_scroll_x(), get_view_width())
 
@@ -1329,6 +1364,7 @@ func _update_envelope_param_visibility() -> void:
 	envelope_param_frame.visible = panel_mode == "envelope"
 	if envelope_add_button != null:
 		envelope_add_button.visible = panel_mode == "envelope"
+
 
 func _param_display_name(param_name: String) -> String:
 	if PARAM_DISPLAY_NAMES.has(param_name):
@@ -1703,6 +1739,7 @@ func set_focus_highlight(enabled: bool) -> void:
 		return
 	focus_highlight = enabled
 	_update_focus_frames()
+	_apply_input_active(enabled)
 
 func _update_focus_frames() -> void:
 	var color = FRAME_COLOR_ACTIVE if focus_highlight else FRAME_COLOR_INACTIVE
@@ -1714,3 +1751,9 @@ func _update_focus_frames() -> void:
 		if overlay != null:
 			overlay.set("border_color", color)
 			overlay.queue_redraw()
+
+func _apply_input_active(enabled: bool) -> void:
+	if piano_roll != null and piano_roll.has_method("set_input_active"):
+		piano_roll.call("set_input_active", enabled)
+	if envelope_lane != null and envelope_lane.has_method("set_input_active"):
+		envelope_lane.call("set_input_active", enabled)

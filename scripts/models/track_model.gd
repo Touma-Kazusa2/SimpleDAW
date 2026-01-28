@@ -16,6 +16,8 @@ const ADSR_DEFAULTS := {
 var id: String = ""
 var track_name: String = "Track"
 var soundfont_path: String = ""
+var is_muted := false
+var is_solo := false
 var clips: Array = []
 var arrangement: Array = []
 var adsr_defaults: Dictionary = {}
@@ -33,6 +35,24 @@ func set_soundfont_path(path: String) -> void:
 		return
 	soundfont_path = path
 	emit_signal("changed")
+
+func set_muted(enabled: bool) -> void:
+	if is_muted == enabled:
+		return
+	is_muted = enabled
+	emit_signal("changed")
+
+func set_solo(enabled: bool) -> void:
+	if is_solo == enabled:
+		return
+	is_solo = enabled
+	emit_signal("changed")
+
+func toggle_mute() -> void:
+	set_muted(not is_muted)
+
+func toggle_solo() -> void:
+	set_solo(not is_solo)
 
 func get_adsr_param_names() -> Array:
 	return ADSR_PARAMS.duplicate()

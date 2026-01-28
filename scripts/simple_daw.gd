@@ -348,6 +348,10 @@ func _init_panel_slots() -> void:
 			var committed_callable = Callable(self, "_on_arrangement_selection_committed")
 			if not slot.is_connected("arrangement_selection_committed", committed_callable):
 				slot.connect("arrangement_selection_committed", committed_callable)
+		if slot.has_signal("arrangement_clip_double_clicked"):
+			var double_callable = Callable(self, "_on_arrangement_clip_double_clicked")
+			if not slot.is_connected("arrangement_clip_double_clicked", double_callable):
+				slot.connect("arrangement_clip_double_clicked", double_callable)
 		if slot.has_signal("snap_changed"):
 			var snap_callable = Callable(self, "_on_slot_snap_changed")
 			if not slot.is_connected("snap_changed", snap_callable):
@@ -891,6 +895,37 @@ func _on_arrangement_selection_committed(slot_index: int, start_beats: float, en
 		selection_bar.call("set_selection", start_beats, end_beats)
 	_on_selection_committed(start_beats, end_beats)
 
+func _on_arrangement_clip_double_clicked(slot_index: int, track_index: int, clip_index: int, time_beats: float, pitch: float) -> void:
+	var source_slot = _slot_by_index(slot_index)
+	if source_slot == null:
+		return
+	var target_slot = panel_slot_b if source_slot == panel_slot_a else panel_slot_a
+	if target_slot == null:
+		return
+	if target_slot.has_method("select_track"):
+		target_slot.call("select_track", track_index)
+	if target_slot.has_method("select_clip"):
+		target_slot.call("select_clip", clip_index)
+	if target_slot.has_method("set_panel_mode"):
+		target_slot.call("set_panel_mode", "roll")
+	_enable_shared_scroll()
+	if target_slot.has_method("get_roll"):
+		var roll = target_slot.call("get_roll")
+		if roll != null:
+			var ppb = float(roll.get("pixels_per_beat"))
+			var view_width = 0.0
+			if target_slot.has_method("get_view_width"):
+				view_width = float(target_slot.call("get_view_width"))
+			if ppb > 0.0 and view_width > 0.0:
+				var target_x = time_beats * ppb - (view_width * 0.5)
+				var max_x = 0.0
+				if roll.has_method("get_max_scroll_x"):
+					max_x = float(roll.call("get_max_scroll_x"))
+				target_x = clamp(target_x, 0.0, max_x)
+				target_slot.call("set_scroll_x", target_x)
+	if target_slot.has_method("center_roll_on_pitch"):
+		target_slot.call_deferred("center_roll_on_pitch", pitch)
+
 func _on_selection_double_clicked(start_beats: float, end_beats: float) -> void:
 	if active_slot == null:
 		return
@@ -1133,6 +1168,7 @@ func _on_track_tree_track_selected(index: int) -> void:
 	if updating_track_list or active_slot == null:
 		return
 	active_slot.call("select_track", index)
+	_on_soundfont_pressed()
 
 func _on_track_tree_clip_selected(track_index: int, clip_index: int, _clip: Node) -> void:
 	if updating_track_list or active_slot == null:

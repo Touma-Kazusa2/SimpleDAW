@@ -30,6 +30,10 @@ const NOTE_BORDER = Color(0.15, 0.2, 0.25)
 const NOTE_TEXT_COLOR = Color(0.1, 0.1, 0.12)
 const VELOCITY_BAR_COLOR = Color(0.98, 0.85, 0.2, 0.9)
 const VELOCITY_BAR_BORDER = Color(0.0, 0.0, 0.0, 0.9)
+const NOTE_SELECTED_BORDER = Color(0.95, 0.7, 0.2, 0.95)
+const NOTE_SELECTED_FILL = Color(0.95, 0.7, 0.2, 0.25)
+const SELECTION_RECT_FILL = Color(0.4, 0.5, 0.9, 0.2)
+const SELECTION_RECT_BORDER = Color(0.4, 0.5, 0.9, 0.8)
 const MIN_LABEL_KEY_HEIGHT := 12.0
 
 func set_model(notes_model: Node) -> void:
@@ -51,20 +55,29 @@ func _draw() -> void:
 	if model == null:
 		return
 	var active_notes: Array = []
-	for note in model.notes:
+	for i in range(model.notes.size()):
+		var note = model.notes[i]
 		if not _is_note_visible(note):
 			continue
+		var is_selected = model.has_method("is_note_selected") and bool(model.call("is_note_selected", i))
 		var start_beats = note["start"]
 		var duration_beats = note["duration"]
 		var intensity = _get_note_swell(start_beats, duration_beats, playhead_time_beats)
 		if intensity > 0.0:
-			active_notes.append({"note": note, "intensity": intensity})
+			active_notes.append({"note": note, "intensity": intensity, "selected": is_selected})
 		else:
-			_draw_note(note, intensity, font, font_size)
+			_draw_note(note, intensity, font, font_size, is_selected)
 	for entry in active_notes:
-		_draw_note(entry["note"], entry["intensity"], font, font_size)
+		_draw_note(entry["note"], entry["intensity"], font, font_size, bool(entry.get("selected", false)))
+	if model.has_method("get_selection_rect"):
+		var rect_value = model.call("get_selection_rect")
+		if rect_value is Rect2:
+			var rect: Rect2 = rect_value
+			if rect.size.x > 0.0 and rect.size.y > 0.0:
+				draw_rect(rect, SELECTION_RECT_FILL, true)
+				draw_rect(rect, SELECTION_RECT_BORDER, false, 1.0)
 
-func _draw_note(note: Dictionary, intensity: float, font: Font, font_size: int) -> void:
+func _draw_note(note: Dictionary, intensity: float, font: Font, font_size: int, selected: bool) -> void:
 	var start_beats = note["start"]
 	var duration_beats = note["duration"]
 	var pitch = note["pitch"]
@@ -88,7 +101,11 @@ func _draw_note(note: Dictionary, intensity: float, font: Font, font_size: int) 
 		var texture = _get_noise_texture()
 		if texture:
 			draw_texture_rect(texture, draw_rect_area, true, Color(1.0, 1.0, 1.0, noise_opacity))
-	draw_rect(draw_rect_area, NOTE_BORDER, false, 1.0)
+	if selected:
+		draw_rect(draw_rect_area, NOTE_SELECTED_FILL, true)
+		draw_rect(draw_rect_area, NOTE_SELECTED_BORDER, false, 2.0)
+	else:
+		draw_rect(draw_rect_area, NOTE_BORDER, false, 1.0)
 	if show_velocity:
 		var velocity = int(note.get("velocity", 127))
 		var velocity_t = clamp(float(velocity) / 127.0, 0.0, 1.0)

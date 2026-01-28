@@ -36,6 +36,7 @@ var last_content_height: float = 0.0
 var shift_modifier_active: bool = false
 var clip_model: Node = null
 var sync_clip_length := true
+var input_active := false
 
 @onready var grid = $RollPanel/RollContent/Grid
 @onready var notes_view = $RollPanel/RollContent/NotesLayer
@@ -206,7 +207,7 @@ func _input(event: InputEvent) -> void:
 			velocity_mode = !velocity_mode
 			input_controller.velocity_mode = velocity_mode
 
-	if event is InputEventMouseMotion:
+	if event is InputEventMouseMotion and input_active:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 			var delta = -event.relative.y * KEY_HEIGHT_DRAG_SCALE
 			if abs(delta) > 0.001:
@@ -214,6 +215,9 @@ func _input(event: InputEvent) -> void:
 				var clamped_min = max(MIN_KEY_HEIGHT, min_key_height)
 				key_height = clamp(key_height + delta, clamped_min, MAX_KEY_HEIGHT)
 				_apply_config()
+
+func set_input_active(enabled: bool) -> void:
+	input_active = enabled
 
 func _update_playhead() -> void:
 	playhead.position.x = current_time_beats * pixels_per_beat

@@ -210,9 +210,12 @@ func build_snapshot_from_data(
 
 func _build_tracks_cache(project_model: Node, track_router: Node, midi_player: Node, snapshot: Dictionary) -> void:
 	var tracks = project_model.tracks if project_model.has_method("get") else []
+	var solo_active = _has_solo_tracks(tracks)
 	for track_index in range(tracks.size()):
 		var track = tracks[track_index]
 		if track == null:
+			continue
+		if _should_skip_track(track, solo_active):
 			continue
 		var route = _resolve_route(track_router, track_index, track, midi_player)
 		var player = route.get("player", midi_player)
@@ -250,9 +253,12 @@ func _build_clip_cache(project_model: Node, track_index: int, clip_index: int, t
 
 func _build_tracks_from_data(model_data: Dictionary, track_routes: Array, default_player: Node, snapshot: Dictionary) -> void:
 	var tracks: Array = model_data.get("tracks", [])
+	var solo_active = _has_solo_tracks_data(tracks)
 	for track_index in range(tracks.size()):
 		var track_data = tracks[track_index]
 		if not (track_data is Dictionary):
+			continue
+		if _should_skip_track_data(track_data, solo_active):
 			continue
 		var route = _resolve_route_from_data(track_routes, track_index, default_player)
 		var player = route.get("player", default_player)
@@ -634,6 +640,36 @@ func _resolve_track_data(model_data: Dictionary, track_index: int) -> Dictionary
 		return {}
 	var track_data = tracks[track_index]
 	return track_data if track_data is Dictionary else {}
+
+func _has_solo_tracks(tracks: Array) -> bool:
+	for track in tracks:
+		if track != null and track.has_method("get") and bool(track.get("is_solo")):
+			return true
+	return false
+
+func _has_solo_tracks_data(tracks: Array) -> bool:
+	for track_data in tracks:
+		if track_data is Dictionary and bool(track_data.get("is_solo", false)):
+			return true
+	return false
+
+func _should_skip_track(track: Node, solo_active: bool) -> bool:
+	if track == null or not track.has_method("get"):
+		return true
+	var is_solo = bool(track.get("is_solo"))
+	var is_muted = bool(track.get("is_muted"))
+	if solo_active:
+		return (not is_solo) or is_muted
+	return is_muted
+
+func _should_skip_track_data(track_data: Dictionary, solo_active: bool) -> bool:
+	if track_data.is_empty():
+		return true
+	var is_solo = bool(track_data.get("is_solo", false))
+	var is_muted = bool(track_data.get("is_muted", false))
+	if solo_active:
+		return (not is_solo) or is_muted
+	return is_muted
 
 func _resolve_clip(track: Node, clip_index: int) -> Node:
 	if track == null:

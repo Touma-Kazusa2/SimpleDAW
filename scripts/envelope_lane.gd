@@ -70,6 +70,7 @@ var _zoom_drag_last_y := 0.0
 var _current_param_name := ""
 var _param_min := 0.0
 var _param_max := 1.0
+var input_active := false
 
 const DEFAULT_VALUE := 0.5
 const POINT_RADIUS := 3.0
@@ -242,6 +243,8 @@ func _gui_input(event: InputEvent) -> void:
 				return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_MIDDLE:
+			if not input_active:
+				return
 			_zoom_dragging = event.pressed
 			if _zoom_dragging:
 				_zoom_drag_last_y = event.position.y
@@ -434,6 +437,11 @@ func _from_normalized(t: float) -> float:
 func _flush_redraw() -> void:
 	_redraw_pending = false
 	queue_redraw()
+
+func set_input_active(enabled: bool) -> void:
+	input_active = enabled
+	if not enabled:
+		_zoom_dragging = false
 
 func _draw_bezier_curve(points: Array, clip_width: float) -> void:
 	var curve = Curve2D.new()

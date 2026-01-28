@@ -6,6 +6,8 @@ const CLIP_MODEL = preload("res://scripts/models/clip_model.gd")
 
 var clip: Node = null
 var notes: Array = []
+var selected_indices: Array = []
+var selection_rect := Rect2()
 
 const DEFAULT_VELOCITY := 100
 
@@ -55,6 +57,7 @@ func delete_note(index: int) -> void:
 	if index < 0 or index >= notes.size():
 		return
 	notes.remove_at(index)
+	_clear_invalid_selection()
 	emit_signal("changed")
 
 func set_clip(next_clip: Node) -> void:
@@ -81,4 +84,33 @@ func _ensure_clip() -> void:
 func _on_clip_changed() -> void:
 	if clip != null:
 		notes = clip.notes
+		_clear_invalid_selection()
 	emit_signal("changed")
+
+func set_selection(rect: Rect2, indices: Array) -> void:
+	selection_rect = rect
+	selected_indices = indices.duplicate()
+	emit_signal("changed")
+
+func clear_selection() -> void:
+	if selected_indices.is_empty() and selection_rect == Rect2():
+		return
+	selected_indices = []
+	selection_rect = Rect2()
+	emit_signal("changed")
+
+func get_selection_rect() -> Rect2:
+	return selection_rect
+
+func is_note_selected(index: int) -> bool:
+	return selected_indices.has(index)
+
+func _clear_invalid_selection() -> void:
+	if selected_indices.is_empty():
+		return
+	var next: Array = []
+	for idx in selected_indices:
+		var i = int(idx)
+		if i >= 0 and i < notes.size():
+			next.append(i)
+	selected_indices = next

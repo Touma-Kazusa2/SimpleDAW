@@ -2,6 +2,7 @@ extends Control
 
 signal clip_selected(track_index: int, clip_index: int)
 signal track_selected(track_index: int)
+signal clip_double_clicked(track_index: int, clip_index: int, time_beats: float, pitch: float)
 signal selection_preview(start_beats: float, end_beats: float)
 signal selection_committed(start_beats: float, end_beats: float)
 signal content_height_changed
@@ -17,6 +18,10 @@ signal scroll_request(delta_x: float, delta_y: float)
 @export var min_pitch: int = 36
 @export var max_pitch: int = 96
 @export var playhead_time_beats: float = -1.0
+@export var show_tempo_map: bool = true
+@export var tempo_map_height: float = 140.0
+@export var tempo_map_padding: float = 6.0
+@export var tempo_header_height: float = 28.0
 
 @export var label_width: float = 140.0
 @export var row_height: float = 56.0
@@ -50,8 +55,33 @@ const COLOR_NOTE = Color(0.95, 0.55, 0.2, 0.7)
 const COLOR_SELECTION = Color(0.95, 0.55, 0.2, 0.22)
 const COLOR_SELECTION_BORDER = Color(0.95, 0.55, 0.2, 0.75)
 const COLOR_PLAYHEAD = Color(0.95, 0.7, 0.3, 0.9)
+const COLOR_CLIP_HOVER = Color(1.0, 1.0, 1.0, 0.95)
+const COLOR_TEMPO_BG = Color(0.06, 0.06, 0.07)
+const COLOR_TEMPO_CONTAINER_BG = Color(0.58, 0.58, 0.59)
+const COLOR_TEMPO_GRID = Color(1.0, 1.0, 1.0, 0.08)
+const COLOR_TEMPO_CURVE = Color(0.95, 0.55, 0.2, 0.9)
+const COLOR_TEMPO_FILL = Color(0.95, 0.55, 0.2, 0.2)
+const COLOR_TEMPO_POINT = Color(0.98, 0.82, 0.25, 1.0)
+const COLOR_TEMPO_DIVIDER = Color(0.1, 0.1, 0.12)
+const COLOR_TEMPO_FRAME = Color(0.95, 0.55, 0.2, 0.9)
+const COLOR_LABEL_BUTTON_BG = Color(0.12, 0.12, 0.14, 0.9)
+const COLOR_LABEL_BUTTON_ACTIVE = Color(0.95, 0.55, 0.2, 0.9)
+const COLOR_LABEL_BUTTON_BORDER = Color(1.0, 1.0, 1.0, 0.2)
+const COLOR_LABEL_BUTTON_TEXT = Color(0.92, 0.96, 1.0, 0.95)
 const WHEEL_SCROLL_X := 80.0
 const WHEEL_SCROLL_Y := 64.0
+const ROW_ALPHA := 0.0
+const TEMPO_BPM_MIN := 40.0
+const TEMPO_BPM_MAX := 240.0
+const TEMPO_POINT_RADIUS := 3.0
+const TEMPO_DELETE_TOLERANCE_BEATS := 0.2
+const TEMPO_DIVIDER_HEIGHT := 6.0
+const TEMPO_ZOOM_MIN := 1.0
+const TEMPO_ZOOM_MAX := 6.0
+const TEMPO_ZOOM_DRAG_SCALE := 0.01
+const LABEL_BUTTON_SIZE := 18.0
+const LABEL_BUTTON_GAP := 4.0
+const LABEL_BUTTON_PADDING := 4.0
 
 var project_model: Node = null
 var selected_track_index := -1
@@ -79,9 +109,42 @@ var _external_drag_track_index := -1
 var _external_drag_start := 0.0
 var _external_drag_length := 0.0
 var _external_drag_clip: Node = null
+var _hover_track_index := -1
+var _hover_clip_index := -1
+var _hover_label_track_index := -1
+var _tempo_drawing := false
+var _tempo_deleting := false
+var _tempo_zoom_dragging := false
+var _tempo_zoom_last_y := 0.0
+var _tempo_last_draw_time := -1.0
+var _tempo_last_draw_bpm := 0.0
+var _tempo_last_delete_time := -1.0
+var _tempo_zoom := 1.0
+var _global_resize_active := false
+var _global_resize_start_y := 0.0
+var _global_resize_base_row := 0.0
+var _global_resize_base_heights: Dictionary = {}
+
+@onready var tempo_header: Control = get_node_or_null("TempoHeader")
+@onready var tempo_toggle: BaseButton = get_node_or_null("TempoHeader/TempoToggle")
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	if not mouse_exited.is_connected(_on_mouse_exited):
+		mouse_exited.connect(_on_mouse_exited)
+	_update_tempo_header_layout()
+	if tempo_toggle != null and tempo_toggle.has_signal("toggled"):
+		var toggle_callable = Callable(self, "_on_tempo_toggle_toggled")
+		if not tempo_toggle.is_connected("toggled", toggle_callable):
+			tempo_toggle.connect("toggled", toggle_callable)
+	tempo_toggle.button_pressed = show_tempo_map if tempo_toggle != null else false
+
+func _on_mouse_exited() -> void:
+	if _hover_track_index != -1 or _hover_clip_index != -1 or _hover_label_track_index != -1:
+		_hover_track_index = -1
+		_hover_clip_index = -1
+		_hover_label_track_index = -1
+		queue_redraw()
 
 func set_project_model(next_model: Node) -> void:
 	if project_model != null and project_model.has_signal("changed"):
@@ -104,9 +167,12 @@ func set_view(scroll_x: float, width: float) -> void:
 	queue_redraw()
 
 func set_view_scroll_y(scroll_y: float) -> void:
-	var view_height = max(1.0, size.y)
-	var max_y = max(0.0, get_content_height() - view_height)
-	view_scroll_y = clamp(scroll_y, 0.0, max_y)
+	var view_height = max(1.0, size.y - _tempo_slot_height())
+	var content_height = get_content_height()
+	var max_y = max(0.0, content_height - view_height)
+	var clamped = clamp(scroll_y, 0.0, max_y)
+	view_scroll_y = clamped
+	_update_tempo_header_layout()
 	queue_redraw()
 
 func set_pitch_range(min_value: int, max_value: int) -> void:
@@ -126,11 +192,23 @@ func set_playhead_time(time_beats: float) -> void:
 func get_playhead_time_beats() -> float:
 	return playhead_time_beats
 
+func get_view_height() -> float:
+	return max(1.0, size.y - _tempo_slot_height())
+
+func set_show_tempo_map(enabled: bool) -> void:
+	if show_tempo_map == enabled:
+		return
+	show_tempo_map = enabled
+	if tempo_toggle != null and tempo_toggle.button_pressed != enabled:
+		tempo_toggle.button_pressed = enabled
+	emit_signal("content_height_changed")
+	queue_redraw()
+
 func get_content_height() -> float:
 	var track_count = _get_track_count()
 	if track_count <= 0:
-		return top_padding * 2.0 + row_height
-	var total = top_padding * 2.0
+		return top_padding + row_height
+	var total = top_padding
 	for i in range(track_count):
 		total += _get_track_height(i)
 	if track_count > 1:
@@ -145,6 +223,9 @@ func _draw() -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
 	draw_rect(Rect2(Vector2.ZERO, size), COLOR_BG, true)
+	_update_tempo_header_layout()
+	if show_tempo_map:
+		_draw_tempo_map()
 	_draw_tracks()
 	_draw_global_grid()
 	_draw_global_selection()
@@ -157,14 +238,93 @@ func _draw_playhead() -> void:
 	var x = lane_rect.position.x + (playhead_time_beats * pixels_per_beat) - view_scroll_x
 	if x < lane_rect.position.x or x > lane_rect.position.x + lane_rect.size.x:
 		return
-	draw_line(Vector2(x, lane_rect.position.y), Vector2(x, lane_rect.position.y + lane_rect.size.y), COLOR_PLAYHEAD, 2.0)
+	draw_line(Vector2(x, 0.0), Vector2(x, size.y), COLOR_PLAYHEAD, 2.0)
+
+func _draw_tempo_map() -> void:
+	var map_height = _tempo_map_height()
+	var slot_height = _tempo_slot_height()
+	if slot_height <= 0.0:
+		return
+	var slot_y = top_padding - view_scroll_y
+	var slot_rect = Rect2(Vector2(0.0, slot_y), Vector2(size.x, slot_height))
+	if slot_rect.position.y > size.y or slot_rect.position.y + slot_rect.size.y < 0.0:
+		return
+	draw_rect(slot_rect, COLOR_TEMPO_CONTAINER_BG, true)
+	if map_height <= 0.0:
+		return
+	var map_y = top_padding - view_scroll_y + max(0.0, tempo_header_height)
+	var rect = Rect2(Vector2(0.0, map_y), Vector2(size.x, map_height))
+	draw_rect(rect, COLOR_TEMPO_BG, true)
+	draw_rect(rect, COLOR_TEMPO_FRAME, false, 2.0)
+	var lane_left = label_width
+	var lane_width = max(0.0, size.x - lane_left)
+	if lane_width <= 0.0:
+		return
+	var inner = Rect2(
+		Vector2(lane_left + tempo_map_padding, map_y + tempo_map_padding),
+		Vector2(max(0.0, lane_width - tempo_map_padding * 2.0), max(0.0, map_height - tempo_map_padding * 2.0))
+	)
+	if inner.size.x <= 0.0 or inner.size.y <= 0.0:
+		return
+	_draw_tempo_grid(inner)
+	var events = _get_tempo_events()
+	var tempo_range = _tempo_display_range()
+	var bpm_min = tempo_range.x
+	var bpm_max = tempo_range.y
+	var points: Array = []
+	for event in events:
+		var time_beats = float(event.get("time", 0.0))
+		var bpm = float(event.get("bpm", bpm_min))
+		var x = lane_left + time_beats * pixels_per_beat - view_scroll_x
+		var t = (bpm - bpm_min) / (bpm_max - bpm_min)
+		var y = inner.position.y + inner.size.y * (1.0 - t)
+		points.append(Vector2(x, y))
+	if points.is_empty():
+		return
+	var draw_points = points.duplicate()
+	var last = points[points.size() - 1]
+	points.append(Vector2(lane_left + inner.size.x + tempo_map_padding, last.y))
+	var prev = points[0]
+	for i in range(1, points.size()):
+		var cur = points[i]
+		draw_line(prev, cur, COLOR_TEMPO_CURVE, 2.0)
+		prev = cur
+	var fill = PackedVector2Array(points)
+	fill.append(Vector2(points[points.size() - 1].x, inner.position.y + inner.size.y))
+	fill.append(Vector2(points[0].x, inner.position.y + inner.size.y))
+	draw_colored_polygon(fill, COLOR_TEMPO_FILL)
+	for pos in draw_points:
+		if pos.x >= inner.position.x - TEMPO_POINT_RADIUS and pos.x <= inner.position.x + inner.size.x + TEMPO_POINT_RADIUS:
+			draw_circle(pos, TEMPO_POINT_RADIUS, COLOR_TEMPO_POINT)
+	var divider_y = rect.position.y + rect.size.y
+	var divider_rect = Rect2(Vector2(0.0, divider_y), Vector2(size.x, TEMPO_DIVIDER_HEIGHT))
+	draw_rect(divider_rect, COLOR_TEMPO_DIVIDER, true)
+
+func _draw_tempo_grid(inner: Rect2) -> void:
+	if pixels_per_beat <= 0.0:
+		return
+	var view_span = view_width if view_width > 0.0 else inner.size.x
+	var draw_x0 = max(0.0, view_scroll_x)
+	var draw_x1 = max(draw_x0, view_scroll_x + view_span)
+	var beat_start = int(floor(draw_x0 / pixels_per_beat))
+	var beat_end = int(ceil(draw_x1 / pixels_per_beat))
+	var measure = max(1, beats_per_measure)
+	for beat in range(beat_start, beat_end + 1):
+		var x = label_width + (beat * pixels_per_beat) - view_scroll_x
+		var color = COLOR_MEASURE if (beat % measure == 0) else COLOR_TEMPO_GRID
+		if x < inner.position.x or x > inner.position.x + inner.size.x:
+			continue
+		draw_line(Vector2(x, inner.position.y), Vector2(x, inner.position.y + inner.size.y), color, 1.0)
+	for i in range(1, 4):
+		var y = inner.position.y + (inner.size.y * float(i) / 4.0)
+		draw_line(Vector2(inner.position.x, y), Vector2(inner.position.x + inner.size.x, y), COLOR_TEMPO_GRID, 1.0)
 
 func _draw_tracks() -> void:
 	var track_count = _get_track_count()
 	if track_count <= 0:
 		return
 	var lane_rect = _get_lane_rect()
-	var row_y = top_padding - view_scroll_y
+	var row_y = _content_top() - view_scroll_y
 	for i in range(track_count):
 		var height = _get_track_height(i)
 		var row_rect = Rect2(Vector2(0.0, row_y), Vector2(size.x, height))
@@ -172,6 +332,7 @@ func _draw_tracks() -> void:
 			row_y += height + row_spacing
 			continue
 		var row_color = COLOR_ROW if (i % 2 == 0) else COLOR_ROW_ALT
+		row_color.a = ROW_ALPHA
 		draw_rect(row_rect, row_color, true)
 		var track_clip_height = _get_track_clip_height(height)
 		var label_rect = Rect2(Vector2(0.0, row_y + (height - track_clip_height) * 0.5), Vector2(label_width, track_clip_height))
@@ -229,6 +390,46 @@ func _draw_track_label(track_index: int, label_rect: Rect2) -> void:
 	var text_y = label_rect.position.y + (label_rect.size.y - text_size.y) * 0.5 + font.get_ascent(font_size)
 	draw_string(font, Vector2(text_x, text_y), label, HORIZONTAL_ALIGNMENT_LEFT, label_rect.size.x - left_padding, font_size, COLOR_TRACK_TEXT)
 	draw_rect(label_rect, COLOR_TRACK_FRAME, false, 2.0)
+	if track_index == _hover_label_track_index:
+		_draw_track_label_buttons(track_index, label_rect)
+
+func _draw_track_label_buttons(track_index: int, label_rect: Rect2) -> void:
+	var track = _get_track(track_index)
+	if track == null or label_rect.size.x <= 0.0 or label_rect.size.y <= 0.0:
+		return
+	var font = get_theme_default_font()
+	var font_size = int(clamp(label_rect.size.y * 0.6, 8.0, 16.0))
+	var rects = _label_button_rects(label_rect)
+	if rects.is_empty():
+		return
+	var is_solo = track.has_method("get") and bool(track.get("is_solo"))
+	var is_muted = track.has_method("get") and bool(track.get("is_muted"))
+	_draw_label_button(rects["solo"], "S", is_solo, font, font_size)
+	_draw_label_button(rects["mute"], "M", is_muted, font, font_size)
+
+func _draw_label_button(rect: Rect2, label: String, active: bool, font: Font, font_size: int) -> void:
+	var fill = COLOR_LABEL_BUTTON_ACTIVE if active else COLOR_LABEL_BUTTON_BG
+	draw_rect(rect, fill, true)
+	draw_rect(rect, COLOR_LABEL_BUTTON_BORDER, false, 1.0)
+	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size)
+	var text_pos = Vector2(
+		rect.position.x + (rect.size.x - text_size.x) * 0.5,
+		rect.position.y + (rect.size.y - text_size.y) * 0.5 + font.get_ascent(font_size)
+	)
+	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, font_size, COLOR_LABEL_BUTTON_TEXT)
+
+func _label_button_rects(label_rect: Rect2) -> Dictionary:
+	var size = min(LABEL_BUTTON_SIZE, label_rect.size.y - LABEL_BUTTON_PADDING * 2.0)
+	if size <= 0.0:
+		return {}
+	var right_x = label_rect.position.x + label_rect.size.x - LABEL_BUTTON_PADDING - size
+	var y = label_rect.position.y + (label_rect.size.y - size) * 0.5
+	var mute_rect = Rect2(Vector2(right_x, y), Vector2(size, size))
+	var solo_rect = Rect2(Vector2(right_x - size - LABEL_BUTTON_GAP, y), Vector2(size, size))
+	return {
+		"solo": solo_rect,
+		"mute": mute_rect
+	}
 
 func _draw_track_clips(track_index: int, lane_rect: Rect2) -> void:
 	var track = _get_track(track_index)
@@ -255,6 +456,12 @@ func _draw_track_clips(track_index: int, lane_rect: Rect2) -> void:
 			border = COLOR_CLIP_SELECTED
 		elif is_linked or not is_owned:
 			border = COLOR_CLIP_LINKED
+		var is_hovered = track_index == _hover_track_index and clip_index == _hover_clip_index
+		if is_hovered:
+			border = COLOR_CLIP_HOVER
+		var fill = border
+		fill.a = 0.05
+		draw_rect(clipped, fill, true)
 		draw_rect(clipped, border, false, 2.0)
 		_draw_clip_label(entry, clipped)
 		_draw_clip_notes(entry, clip_rect, lane_rect)
@@ -357,10 +564,30 @@ func _draw_clip_label(entry: Dictionary, clip_rect: Rect2) -> void:
 	draw_string(font, Vector2(text_x, text_y), label, HORIZONTAL_ALIGNMENT_LEFT, clip_rect.size.x - left_padding, font_size, COLOR_CLIP_TEXT)
 
 func _gui_input(event: InputEvent) -> void:
+	if _handle_tempo_map_input(event):
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.double_click:
+		var hit = _hit_test_clip(event.position)
+		if not hit.is_empty():
+			var entry = hit.get("entry", {})
+			var track_index = int(hit.get("track_index", -1))
+			var time_beats = _time_for_clip_pos(track_index, entry, event.position)
+			var pitch = _pitch_for_clip_pos(track_index, entry, event.position)
+			emit_signal("clip_double_clicked", track_index, int(hit.get("clip_index", -1)), time_beats, pitch)
+			accept_event()
+			return
 		emit_signal("zoom_reset_requested", event.position.x)
 		accept_event()
 		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
+		if event.pressed:
+			if _begin_global_resize(event.position.y):
+				accept_event()
+				return
+		elif _global_resize_active:
+			_end_global_resize()
+			accept_event()
+			return
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			if event.ctrl_pressed:
@@ -377,6 +604,16 @@ func _gui_input(event: InputEvent) -> void:
 			return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			var label_hit = _label_button_hit(event.position)
+			if not label_hit.is_empty():
+				var track_index = int(label_hit.get("track_index", -1))
+				var action = String(label_hit.get("action", ""))
+				if action == "solo":
+					_toggle_track_solo(track_index)
+				elif action == "mute":
+					_toggle_track_mute(track_index)
+				accept_event()
+				return
 			var resize_index = _resize_track_index_at_pos(event.position)
 			if resize_index >= 0:
 				_begin_track_resize(resize_index, event.position.y)
@@ -395,14 +632,18 @@ func _gui_input(event: InputEvent) -> void:
 				_end_selection_drag(event.position)
 			else:
 				_end_drag()
-		accept_event()
-		return
+			accept_event()
+			return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
 		var hit = _hit_test_clip(event.position)
 		if not hit.is_empty():
 			_remove_or_unplace_clip(hit["track_index"], hit["entry"])
 			accept_event()
 			return
+	if event is InputEventMouseMotion and _global_resize_active:
+		_update_global_resize(event.position.y)
+		accept_event()
+		return
 	if event is InputEventMouseMotion and _resizing_track_index >= 0:
 		_update_track_resize(event.position.y)
 		accept_event()
@@ -417,6 +658,10 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and _drag_mode != "":
 		_update_drag(event.position)
 		accept_event()
+		return
+	if event is InputEventMouseMotion:
+		_update_hover_label(event.position)
+		_update_hover_clip(event.position)
 
 func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
 	if not _is_browser_clip_drag(data):
@@ -582,8 +827,48 @@ func _hit_test_clip(local_pos: Vector2) -> Dictionary:
 			}
 	return {}
 
+func _time_for_clip_pos(track_index: int, entry: Dictionary, local_pos: Vector2) -> float:
+	if track_index < 0 or entry.is_empty():
+		return 0.0
+	var clip_rect = _clip_rect(track_index, entry)
+	if clip_rect.size.x <= 0.0:
+		return float(entry.get("start", 0.0))
+	var length_beats = _get_display_length(entry)
+	if length_beats <= 0.0:
+		return float(entry.get("start", 0.0))
+	var local_x = clamp(local_pos.x, clip_rect.position.x, clip_rect.position.x + clip_rect.size.x)
+	var t = (local_x - clip_rect.position.x) / clip_rect.size.x
+	var clip_start = float(entry.get("start", 0.0))
+	return clip_start + clamp(t * length_beats, 0.0, length_beats)
+
+func _pitch_for_clip_pos(track_index: int, entry: Dictionary, local_pos: Vector2) -> float:
+	if track_index < 0 or entry.is_empty():
+		return float(min_pitch + max_pitch) * 0.5
+	var clip_rect = _clip_rect(track_index, entry)
+	if clip_rect.size.y <= 0.0:
+		return float(min_pitch + max_pitch) * 0.5
+	var pitch_min = min_pitch
+	var pitch_max = max_pitch
+	var clip = entry.get("clip")
+	if clip != null and clip.has_method("get"):
+		var notes = clip.get("notes")
+		if notes != null and not notes.is_empty():
+			var local_min = pitch_max
+			var local_max = pitch_min
+			for note in notes:
+				var note_pitch = int(note.get("pitch", pitch_min))
+				local_min = min(local_min, note_pitch)
+				local_max = max(local_max, note_pitch)
+			if local_max >= local_min:
+				pitch_min = local_min
+				pitch_max = local_max
+	var local_y = clamp(local_pos.y, clip_rect.position.y, clip_rect.position.y + clip_rect.size.y)
+	var t = (local_y - clip_rect.position.y) / clip_rect.size.y
+	var pitch = lerp(float(pitch_max), float(pitch_min), t)
+	return pitch
+
 func _track_index_at_pos(local_pos: Vector2) -> int:
-	var y = local_pos.y + view_scroll_y - top_padding
+	var y = local_pos.y + view_scroll_y - _content_top()
 	if y < 0.0:
 		return -1
 	var acc = 0.0
@@ -595,7 +880,7 @@ func _track_index_at_pos(local_pos: Vector2) -> int:
 	return -1
 
 func _row_y(track_index: int) -> float:
-	var y = top_padding - view_scroll_y
+	var y = _content_top() - view_scroll_y
 	for i in range(track_index):
 		y += _get_track_height(i) + row_spacing
 	return y
@@ -617,7 +902,10 @@ func _get_track_clip_height(track_height: float) -> float:
 
 func _get_lane_rect() -> Rect2:
 	var width = max(0.0, size.x - label_width)
-	return Rect2(Vector2(label_width, 0.0), Vector2(width, size.y))
+	var lane_y = _content_top() - view_scroll_y
+	var visible_y = max(0.0, lane_y)
+	var lane_height = max(0.0, size.y - visible_y)
+	return Rect2(Vector2(label_width, visible_y), Vector2(width, lane_height))
 
 func _get_track_count() -> int:
 	if project_model == null:
@@ -645,6 +933,13 @@ func _get_track_height(track_index: int) -> float:
 			return float(_track_heights[key])
 	return row_height
 
+func _label_rect_for_track(track_index: int) -> Rect2:
+	var height = _get_track_height(track_index)
+	var row_y = _row_y(track_index)
+	var clip_height = _get_track_clip_height(height)
+	var y = row_y + (height - clip_height) * 0.5
+	return Rect2(Vector2(0.0, y), Vector2(label_width, clip_height))
+
 func _set_track_height(track_index: int, height: float) -> void:
 	var track = _get_track(track_index)
 	if track == null:
@@ -655,7 +950,7 @@ func _set_track_height(track_index: int, height: float) -> void:
 	queue_redraw()
 
 func _resize_track_index_at_pos(local_pos: Vector2) -> int:
-	var y = local_pos.y + view_scroll_y - top_padding
+	var y = local_pos.y + view_scroll_y - _content_top()
 	if y < 0.0:
 		return -1
 	var acc = 0.0
@@ -681,6 +976,39 @@ func _update_track_resize(mouse_y: float) -> void:
 
 func _end_track_resize() -> void:
 	_resizing_track_index = -1
+
+func _begin_global_resize(mouse_y: float) -> bool:
+	if _get_track_count() <= 0:
+		return false
+	_global_resize_active = true
+	_global_resize_start_y = mouse_y
+	_global_resize_base_row = row_height
+	_global_resize_base_heights.clear()
+	for i in range(_get_track_count()):
+		var track = _get_track(i)
+		if track == null:
+			continue
+		_global_resize_base_heights[str(track.id)] = _get_track_height(i)
+	return true
+
+func _update_global_resize(mouse_y: float) -> void:
+	if not _global_resize_active:
+		return
+	var delta = mouse_y - _global_resize_start_y
+	row_height = clamp(_global_resize_base_row + delta, min_row_height, max_row_height)
+	for i in range(_get_track_count()):
+		var track = _get_track(i)
+		if track == null:
+			continue
+		var key = str(track.id)
+		var base = float(_global_resize_base_heights.get(key, row_height))
+		_track_heights[key] = clamp(base + delta, min_row_height, max_row_height)
+	emit_signal("content_height_changed")
+	queue_redraw()
+
+func _end_global_resize() -> void:
+	_global_resize_active = false
+	_global_resize_base_heights.clear()
 
 func _get_display_length(entry: Dictionary) -> float:
 	var length_beats = max(0.0, float(entry.get("length", 0.0)))
@@ -752,6 +1080,292 @@ func _get_drag_clip_length(clip: Node) -> float:
 	if length <= 0.0:
 		length = min_clip_length_beats
 	return length
+
+func _tempo_map_height() -> float:
+	return max(0.0, tempo_map_height) if show_tempo_map else 0.0
+
+func _tempo_slot_height() -> float:
+	var slot_height = max(0.0, tempo_header_height) + _tempo_map_height()
+	if show_tempo_map:
+		slot_height += TEMPO_DIVIDER_HEIGHT
+	return slot_height
+
+func _content_top() -> float:
+	return top_padding + _tempo_slot_height()
+
+func _update_hover_clip(local_pos: Vector2) -> void:
+	var hit = _hit_test_clip(local_pos)
+	var next_track := -1
+	var next_clip := -1
+	if not hit.is_empty():
+		next_track = int(hit.get("track_index", -1))
+		next_clip = int(hit.get("clip_index", -1))
+	if next_track == _hover_track_index and next_clip == _hover_clip_index:
+		return
+	_hover_track_index = next_track
+	_hover_clip_index = next_clip
+	queue_redraw()
+
+func _update_hover_label(local_pos: Vector2) -> void:
+	var next_track := -1
+	if local_pos.x <= label_width:
+		next_track = _track_index_at_pos(local_pos)
+	if next_track == _hover_label_track_index:
+		return
+	_hover_label_track_index = next_track
+	queue_redraw()
+
+func _label_button_hit(local_pos: Vector2) -> Dictionary:
+	if local_pos.x > label_width:
+		return {}
+	var track_index = _track_index_at_pos(local_pos)
+	if track_index < 0:
+		return {}
+	var label_rect = _label_rect_for_track(track_index)
+	if not label_rect.has_point(local_pos):
+		return {}
+	var rects = _label_button_rects(label_rect)
+	if rects.is_empty():
+		return {}
+	if rects["solo"].has_point(local_pos):
+		return {"track_index": track_index, "action": "solo"}
+	if rects["mute"].has_point(local_pos):
+		return {"track_index": track_index, "action": "mute"}
+	return {}
+
+func _toggle_track_solo(track_index: int) -> void:
+	var track = _get_track(track_index)
+	if track == null:
+		return
+	var enabled = false
+	if track.has_method("get"):
+		enabled = bool(track.get("is_solo"))
+	if track.has_method("set_solo"):
+		track.call("set_solo", not enabled)
+	else:
+		track.set("is_solo", not enabled)
+		if track.has_signal("changed"):
+			track.emit_signal("changed")
+	queue_redraw()
+
+func _toggle_track_mute(track_index: int) -> void:
+	var track = _get_track(track_index)
+	if track == null:
+		return
+	var enabled = false
+	if track.has_method("get"):
+		enabled = bool(track.get("is_muted"))
+	if track.has_method("set_muted"):
+		track.call("set_muted", not enabled)
+	else:
+		track.set("is_muted", not enabled)
+		if track.has_signal("changed"):
+			track.emit_signal("changed")
+	queue_redraw()
+
+func _on_tempo_toggle_toggled(pressed: bool) -> void:
+	set_show_tempo_map(pressed)
+
+func _update_tempo_header_layout() -> void:
+	if tempo_header == null:
+		return
+	var map_y = top_padding - view_scroll_y
+	var header_height = max(0.0, tempo_header_height)
+	tempo_header.position = Vector2(0.0, map_y)
+	tempo_header.size = Vector2(size.x, header_height)
+
+func _tempo_map_rect() -> Rect2:
+	var map_height = _tempo_map_height()
+	var map_y = top_padding - view_scroll_y + max(0.0, tempo_header_height)
+	return Rect2(Vector2(0.0, map_y), Vector2(size.x, map_height))
+
+func _is_in_tempo_map(local_pos: Vector2) -> bool:
+	if not show_tempo_map:
+		return false
+	var rect = _tempo_map_rect()
+	return rect.has_point(local_pos)
+
+func _tempo_display_range() -> Vector2:
+	var span = (TEMPO_BPM_MAX - TEMPO_BPM_MIN) / clamp(_tempo_zoom, TEMPO_ZOOM_MIN, TEMPO_ZOOM_MAX)
+	var center = (TEMPO_BPM_MIN + TEMPO_BPM_MAX) * 0.5
+	var min_bpm = clamp(center - span * 0.5, TEMPO_BPM_MIN, TEMPO_BPM_MAX - span)
+	var max_bpm = clamp(min_bpm + span, TEMPO_BPM_MIN, TEMPO_BPM_MAX)
+	return Vector2(min_bpm, max_bpm)
+
+func _tempo_time_from_pos(local_pos: Vector2) -> float:
+	if pixels_per_beat <= 0.0:
+		return 0.0
+	var lane_left = label_width
+	var local_x = local_pos.x - lane_left
+	return max(0.0, (view_scroll_x + local_x) / pixels_per_beat)
+
+func _tempo_bpm_from_pos(local_pos: Vector2) -> float:
+	var rect = _tempo_map_rect()
+	var inner = Rect2(
+		Vector2(label_width + tempo_map_padding, rect.position.y + tempo_map_padding),
+		Vector2(max(0.0, size.x - label_width - tempo_map_padding * 2.0), max(0.0, rect.size.y - tempo_map_padding * 2.0))
+	)
+	if inner.size.y <= 0.0:
+		return TEMPO_BPM_MIN
+	var tempo_range = _tempo_display_range()
+	var t = 1.0 - clamp((local_pos.y - inner.position.y) / inner.size.y, 0.0, 1.0)
+	return clamp(lerp(tempo_range.x, tempo_range.y, t), TEMPO_BPM_MIN, TEMPO_BPM_MAX)
+
+func _get_tempo_events() -> Array:
+	if project_model != null and project_model.transport != null and project_model.transport.has_method("get_tempo_events"):
+		var events = project_model.transport.get_tempo_events()
+		if events is Array and not events.is_empty():
+			return events
+	var fallback_bpm = 120.0
+	if project_model != null and project_model.transport != null:
+		fallback_bpm = float(project_model.transport.tempo)
+	return [{"time": 0.0, "bpm": fallback_bpm}]
+
+func _set_tempo_events(events: Array) -> void:
+	if project_model == null or project_model.transport == null:
+		return
+	if project_model.transport.has_method("set_tempo_events"):
+		project_model.transport.set_tempo_events(events)
+	queue_redraw()
+
+func _set_tempo_point(time_beats: float, bpm: float, _step: float) -> void:
+	var events = _get_tempo_events()
+	var updated := false
+	for i in range(events.size()):
+		var entry = events[i]
+		var t = float(entry.get("time", 0.0))
+		if is_equal_approx(t, time_beats):
+			entry["bpm"] = bpm
+			events[i] = entry
+			updated = true
+			break
+	if not updated:
+		events.append({"time": time_beats, "bpm": bpm})
+	events.sort_custom(func(a, b): return float(a.get("time", 0.0)) < float(b.get("time", 0.0)))
+	_set_tempo_events(events)
+
+func _remove_tempo_points_near(time_beats: float, tolerance: float) -> void:
+	var events = _get_tempo_events()
+	if events.size() <= 1:
+		return
+	var next: Array = []
+	for entry in events:
+		var t = float(entry.get("time", 0.0))
+		if abs(t - time_beats) > tolerance:
+			next.append(entry)
+	if next.is_empty():
+		next.append(events[0])
+	_set_tempo_events(next)
+
+func _snap_time(time_beats: float, step: float) -> float:
+	if step <= 0.0:
+		return time_beats
+	return round(time_beats / step) * step
+
+func _tempo_draw_at(local_pos: Vector2) -> void:
+	var time = _tempo_time_from_pos(local_pos)
+	var bpm = _tempo_bpm_from_pos(local_pos)
+	var step = max(0.0, snap_step_beats)
+	var snapped_time = _snap_time(time, step)
+	if is_equal_approx(snapped_time, _tempo_last_draw_time):
+		return
+	if _tempo_last_draw_time < 0.0:
+		_tempo_last_draw_time = snapped_time
+		_tempo_last_draw_bpm = bpm
+		_set_tempo_point(snapped_time, bpm, step)
+		return
+	var delta = snapped_time - _tempo_last_draw_time
+	var step_dir = step if delta >= 0.0 else -step
+	if step <= 0.0 or step_dir == 0.0:
+		return
+	var t = _tempo_last_draw_time + step_dir
+	while (step_dir > 0.0 and t <= snapped_time) or (step_dir < 0.0 and t >= snapped_time):
+		var alpha = 0.0 if is_equal_approx(snapped_time, _tempo_last_draw_time) else (t - _tempo_last_draw_time) / delta
+		var interp_bpm = lerp(_tempo_last_draw_bpm, bpm, alpha)
+		_set_tempo_point(t, interp_bpm, step)
+		t += step_dir
+	_tempo_last_draw_time = snapped_time
+	_tempo_last_draw_bpm = bpm
+
+func _tempo_delete_at(local_pos: Vector2) -> void:
+	var time = _tempo_time_from_pos(local_pos)
+	var step = max(0.0, snap_step_beats)
+	var snapped_time = _snap_time(time, step)
+	var tolerance = max(TEMPO_DELETE_TOLERANCE_BEATS, step * 0.45)
+	if _tempo_last_delete_time < 0.0 or step <= 0.0:
+		_remove_tempo_points_near(snapped_time, tolerance)
+		_tempo_last_delete_time = snapped_time
+		return
+	if is_equal_approx(snapped_time, _tempo_last_delete_time):
+		return
+	var delta = snapped_time - _tempo_last_delete_time
+	var step_dir = step if delta >= 0.0 else -step
+	if step_dir == 0.0:
+		return
+	var t = _tempo_last_delete_time + step_dir
+	while (step_dir > 0.0 and t <= snapped_time) or (step_dir < 0.0 and t >= snapped_time):
+		_remove_tempo_points_near(t, tolerance)
+		t += step_dir
+	_tempo_last_delete_time = snapped_time
+
+func _tempo_update_zoom_drag(local_pos: Vector2) -> void:
+	var delta = local_pos.y - _tempo_zoom_last_y
+	_tempo_zoom_last_y = local_pos.y
+	if abs(delta) < 0.001:
+		return
+	_tempo_zoom = clamp(_tempo_zoom + (-delta * TEMPO_ZOOM_DRAG_SCALE), TEMPO_ZOOM_MIN, TEMPO_ZOOM_MAX)
+	queue_redraw()
+
+func _handle_tempo_map_input(event: InputEvent) -> bool:
+	if not show_tempo_map:
+		return false
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP or event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			return false
+	var pos = event.position if event is InputEventMouse else null
+	if pos != null and not _is_in_tempo_map(pos):
+		return false
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_MIDDLE:
+			_tempo_zoom_dragging = event.pressed
+			if _tempo_zoom_dragging:
+				_tempo_zoom_last_y = event.position.y
+			accept_event()
+			return true
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_tempo_drawing = true
+				_tempo_draw_at(event.position)
+			else:
+				_tempo_drawing = false
+				_tempo_last_draw_time = -1.0
+				_tempo_last_draw_bpm = 0.0
+			accept_event()
+			return true
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			if event.pressed:
+				_tempo_deleting = true
+				_tempo_last_delete_time = -1.0
+				_tempo_delete_at(event.position)
+			else:
+				_tempo_deleting = false
+				_tempo_last_delete_time = -1.0
+			accept_event()
+			return true
+	if event is InputEventMouseMotion:
+		if _tempo_zoom_dragging:
+			_tempo_update_zoom_drag(event.position)
+			accept_event()
+			return true
+		if _tempo_drawing:
+			_tempo_draw_at(event.position)
+			accept_event()
+			return true
+		if _tempo_deleting:
+			_tempo_delete_at(event.position)
+			accept_event()
+			return true
+	return false
 
 func _draw_external_drag_preview(track_index: int, lane_rect: Rect2) -> void:
 	if _external_drag_clip == null:

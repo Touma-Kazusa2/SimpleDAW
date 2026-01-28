@@ -38,6 +38,9 @@ var drag_velocity_index: int = -1
 var snap_enabled: bool = false
 var note_index_by_beat: Dictionary = {}
 var note_index_dirty: bool = true
+var selection_dragging := false
+var selection_start := Vector2.ZERO
+var selection_end := Vector2.ZERO
 
 func setup(notes_model: Node, roll_root: Control) -> void:
 	model = notes_model
@@ -65,6 +68,10 @@ func _on_roll_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			var local_pos = event.position
+			if event.ctrl_pressed:
+				_begin_box_selection(local_pos)
+				roll_content.accept_event()
+				return
 			if debug_enabled:
 				emit_signal("debug_click", local_pos)
 				if DEBUG_LOGS:
@@ -82,6 +89,10 @@ func _on_roll_gui_input(event: InputEvent) -> void:
 			if _try_create_note(local_pos):
 				roll_content.accept_event()
 		else:
+			if selection_dragging:
+				_end_box_selection(event.position)
+				roll_content.accept_event()
+				return
 			if is_dragging_velocity:
 				if drag_velocity_index >= 0 and drag_velocity_index < model.notes.size():
 					var velocity = int(model.notes[drag_velocity_index].get("velocity", 127))
@@ -96,6 +107,10 @@ func _on_roll_gui_input(event: InputEvent) -> void:
 				drag_mode = ""
 
 	if event is InputEventMouseMotion:
+		if selection_dragging:
+			_update_box_selection(event.position)
+			roll_content.accept_event()
+			return
 		if is_dragging_velocity:
 			_update_velocity_drag(event.position)
 			roll_content.accept_event()
@@ -221,6 +236,58 @@ func _update_velocity_drag(local_pos: Vector2) -> void:
 	var velocity_t = (local_pos.x - rect.position.x) / rect.size.x
 	var velocity = int(round(clamp(velocity_t, 0.0, 1.0) * 127.0))
 	model.update_velocity(drag_velocity_index, velocity)
+
+func _begin_box_selection(local_pos: Vector2) -> void:
+	selection_dragging = true
+	selection_start = local_pos
+	selection_end = local_pos
+	_update_box_selection(local_pos)
+
+func _update_box_selection(local_pos: Vector2) -> void:
+	selection_end = local_pos
+	if model == null or not model.has_method("set_selection"):
+		return
+	var rect = _selection_rect()
+	var indices = _notes_in_rect(rect)
+	model.call("set_selection", rect, indices)
+
+func _end_box_selection(local_pos: Vector2) -> void:
+	selection_dragging = false
+	selection_end = local_pos
+	if model == null or not model.has_method("set_selection"):
+		return
+	var rect = _selection_rect()
+	var indices = _notes_in_rect(rect)
+	model.call("set_selection", Rect2(), indices)
+
+func _selection_rect() -> Rect2:
+	var x0 = min(selection_start.x, selection_end.x)
+	var y0 = min(selection_start.y, selection_end.y)
+	var x1 = max(selection_start.x, selection_end.x)
+	var y1 = max(selection_start.y, selection_end.y)
+	return Rect2(Vector2(x0, y0), Vector2(max(0.0, x1 - x0), max(0.0, y1 - y0)))
+
+func _notes_in_rect(rect: Rect2) -> Array:
+	var indices: Array = []
+	if model == null:
+		return indices
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return indices
+	for i in range(model.notes.size()):
+		var note = model.notes[i]
+		var note_rect = _note_rect(note)
+		if rect.intersects(note_rect):
+			indices.append(i)
+	return indices
+
+func _note_rect(note: Dictionary) -> Rect2:
+	var start_beats = float(note.get("start", 0.0))
+	var duration_beats = float(note.get("duration", 0.0))
+	var pitch = int(note.get("pitch", min_pitch))
+	var x = start_beats * pixels_per_beat
+	var y = (max_pitch - pitch) * key_height
+	var width = max(0.0, duration_beats * pixels_per_beat)
+	return Rect2(Vector2(x, y), Vector2(width, key_height))
 
 func _ensure_length(required_beats: float) -> void:
 	if required_beats <= visible_beats:
