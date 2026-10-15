@@ -36,3 +36,12 @@ Lightweight, beginner-friendly DAW built on a piano roll foundation. Focused on 
 - Notes that extend past the current length will automatically add 4 measures.
 - Vertical scrolling appears once key height makes content taller than the view.
 - Note creation snaps to whole beats by design (even with snap off).
+
+## License
+
+The original SimpleDAW source code is available under either of these licenses:
+
+- [Apache License 2.0](LICENSE-APACHE)
+- [MIT License](LICENSE-MIT)
+
+You may choose either license when using or redistributing the project. Third-party components and assets keep their own licenses: the MIDI addon is MIT licensed (`addons/midi/LICENSE.txt`), and the Lucid icon set is released under CC0 1.0 (`Lucid V1.2/License`). SoundFont files are not included in the repository and may have separate redistribution terms.

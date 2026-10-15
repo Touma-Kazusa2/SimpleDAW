@@ -1,2 +1,49 @@
+﻿# Godot generated files
 .godot/
+
+# Local/exported builds
+.export/
+export/
+build/
+builds/
+
+# SoundFont files are large and may have separate redistribution terms
 *.sf2
+
+# Editor and IDE files
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary/log files
+*.tmp
+*.temp
+*.log
+# Local AI coding-agent instructions and configuration
+AGENTS.md
+AGENT.md
+AGENTS中文.md
+CLAUDE.md
+GEMINI.md
+.codex/
+.claude/
+.cursor/
+.windsurf/agent.md
+*.agent.md
+AGENTS.local.md
+AGENTS.override.md
+# Local planning documents
+plan.md
+*_plan.md
+plans/
+.plans/
+# Keep only the public project README; other Markdown is local working material
+*.md
+!README.md
