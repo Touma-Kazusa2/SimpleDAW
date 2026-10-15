@@ -7,6 +7,8 @@ signal clip_changed(slot_index: int, clip_index: int)
 signal arrangement_selection_preview(slot_index: int, start_beats: float, end_beats: float)
 signal arrangement_selection_committed(slot_index: int, start_beats: float, end_beats: float)
 signal arrangement_clip_double_clicked(slot_index: int, track_index: int, clip_index: int, time_beats: float, pitch: float)
+signal arrangement_playhead_drag_started(slot_index: int)
+signal arrangement_playhead_time_changed(slot_index: int, time_beats: float)
 signal snap_changed(slot_index: int, enabled: bool, step: float)
 
 const PIANO_ROLL_SCENE = preload("res://piano_roll.tscn")
@@ -59,9 +61,9 @@ var add_clip_button: Button = null
 @onready var panel_row: Control = $"PanelRow"
 @onready var panel_frame: Control = $"PanelRow/PanelFrame"
 @onready var panel_spacer: Control = $"PanelRow/PanelSpacer"
-@onready var envelope_param_frame: Control = $"PanelRow/PanelSpacer/EnvelopeParamFrame"
-@onready var envelope_param_select: OptionButton = $"PanelRow/PanelSpacer/EnvelopeParamFrame/EnvelopeParamSelect"
-@onready var envelope_add_button: Button = $"PanelRow/PanelSpacer/EnvelopeAddButton"
+@onready var envelope_param_frame: Control = $"PanelRow/PanelSpacer/EnvelopeControlBox/EnvelopeParamFrame"
+@onready var envelope_param_select: OptionButton = $"PanelRow/PanelSpacer/EnvelopeControlBox/EnvelopeParamFrame/EnvelopeParamSelect"
+@onready var envelope_add_button: Button = $"PanelRow/PanelSpacer/EnvelopeControlBox/EnvelopeAddButton"
 @onready var panel_v_scroll: Control = $"PanelRow/PanelRightSpacer/PanelVScroll"
 @onready var envelope_lane: Control = $"PanelRow/PanelFrame/EnvelopeLane"
 @onready var comment_lane: Control = $"PanelRow/PanelFrame/CommentLane"
@@ -108,7 +110,7 @@ var arrangement_scroll_x := 0.0
 var arrangement_max_x := 0.0
 var arrangement_view_width := 0.0
 var piano_scroll_x := 0.0
-const ARRANGEMENT_ZOOM_STEP := 10.0
+const ARRANGEMENT_ZOOM_FACTOR := 1.08
 const ARRANGEMENT_MIN_PPB := 2.0
 const ARRANGEMENT_MAX_PPB := 320.0
 const ARRANGEMENT_RESET_PPB := 2.0
@@ -374,6 +376,14 @@ func _init_controls() -> void:
 			var selection_committed_callable = Callable(self, "_on_arrangement_selection_committed")
 			if not arrangement_lane.is_connected("selection_committed", selection_committed_callable):
 				arrangement_lane.connect("selection_committed", selection_committed_callable)
+		if arrangement_lane.has_signal("playhead_drag_started"):
+			var playhead_start_callable = Callable(self, "_on_arrangement_playhead_drag_started")
+			if not arrangement_lane.is_connected("playhead_drag_started", playhead_start_callable):
+				arrangement_lane.connect("playhead_drag_started", playhead_start_callable)
+		if arrangement_lane.has_signal("playhead_time_changed"):
+			var playhead_time_callable = Callable(self, "_on_arrangement_playhead_time_changed")
+			if not arrangement_lane.is_connected("playhead_time_changed", playhead_time_callable):
+				arrangement_lane.connect("playhead_time_changed", playhead_time_callable)
 		if arrangement_lane.has_signal("zoom_request"):
 			var zoom_callable = Callable(self, "_on_arrangement_zoom_request")
 			if not arrangement_lane.is_connected("zoom_request", zoom_callable):
@@ -759,6 +769,12 @@ func _on_arrangement_selection_committed(start_beats: float, end_beats: float) -
 func _on_arrangement_clip_double_clicked(track_index: int, clip_index: int, time_beats: float, pitch: float) -> void:
 	emit_signal("arrangement_clip_double_clicked", slot_index, track_index, clip_index, time_beats, pitch)
 
+func _on_arrangement_playhead_drag_started() -> void:
+	emit_signal("arrangement_playhead_drag_started", slot_index)
+
+func _on_arrangement_playhead_time_changed(time_beats: float) -> void:
+	emit_signal("arrangement_playhead_time_changed", slot_index, time_beats)
+
 func _on_arrangement_zoom_request(local_x: float, direction: int) -> void:
 	if arrangement_lane == null:
 		return
@@ -768,8 +784,16 @@ func _on_arrangement_zoom_request(local_x: float, direction: int) -> void:
 		else:
 			arrangement_pixels_per_beat = ARRANGEMENT_RESET_PPB
 	var old_ppb = arrangement_pixels_per_beat
-	var delta = ARRANGEMENT_ZOOM_STEP * (1.0 if direction >= 0 else -1.0)
-	arrangement_pixels_per_beat = clamp(old_ppb + delta, ARRANGEMENT_MIN_PPB, ARRANGEMENT_MAX_PPB)
+	var label_width = float(arrangement_lane.get("label_width"))
+	var lane_width = max(0.0, arrangement_lane.size.x - label_width)
+	var content_beats = 0.0
+	if arrangement_lane.has_method("get_content_length_beats"):
+		content_beats = float(arrangement_lane.call("get_content_length_beats"))
+	var min_ppb = ARRANGEMENT_MIN_PPB
+	if lane_width > 0.0 and content_beats > 0.0:
+		min_ppb = max(ARRANGEMENT_MIN_PPB, lane_width / (content_beats * 2.0))
+	var zoom_factor = ARRANGEMENT_ZOOM_FACTOR if direction >= 0 else (1.0 / ARRANGEMENT_ZOOM_FACTOR)
+	arrangement_pixels_per_beat = clamp(old_ppb * zoom_factor, min_ppb, ARRANGEMENT_MAX_PPB)
 	if is_equal_approx(old_ppb, arrangement_pixels_per_beat):
 		return
 	var anchor_beat = 0.0
@@ -1477,6 +1501,10 @@ func _update_arrangement_scrollbar() -> void:
 	var content_beats = 0.0
 	if arrangement_lane.has_method("get_content_length_beats"):
 		content_beats = float(arrangement_lane.call("get_content_length_beats"))
+	var min_ppb = ARRANGEMENT_MIN_PPB
+	if lane_width > 0.0 and content_beats > 0.0:
+		min_ppb = max(ARRANGEMENT_MIN_PPB, lane_width / (content_beats * 2.0))
+	arrangement_pixels_per_beat = clamp(arrangement_pixels_per_beat, min_ppb, ARRANGEMENT_MAX_PPB)
 	var target_beats = max(0.0, content_beats * 2.0)
 	var content_width = target_beats * max(0.0, arrangement_pixels_per_beat)
 	arrangement_max_x = max(0.0, content_width - arrangement_view_width)

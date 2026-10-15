@@ -55,8 +55,24 @@ func _send_event(event: Dictionary) -> void:
 			midi_event.controller_value = int(event.get("value", 0))
 			player.call("receive_raw_midi_message", midi_event)
 		"program":
+			var program = int(event.get("program", 0))
+			var bank = int(event.get("bank", 0))
+			var bank_msb = (bank >> 7) & 0x7F
+			var bank_lsb = bank & 0x7F
+			var bank_event = InputEventMIDI.new()
+			bank_event.channel = channel
+			bank_event.message = MIDI_MESSAGE_CONTROL_CHANGE
+			bank_event.controller_number = 0
+			bank_event.controller_value = bank_msb
+			player.call("receive_raw_midi_message", bank_event)
+			var bank_lsb_event = InputEventMIDI.new()
+			bank_lsb_event.channel = channel
+			bank_lsb_event.message = MIDI_MESSAGE_CONTROL_CHANGE
+			bank_lsb_event.controller_number = 32
+			bank_lsb_event.controller_value = bank_lsb
+			player.call("receive_raw_midi_message", bank_lsb_event)
 			midi_event.message = MIDI_MESSAGE_PROGRAM_CHANGE
-			midi_event.instrument = int(event.get("program", 0))
+			midi_event.instrument = program
 			player.call("receive_raw_midi_message", midi_event)
 		"adsr_sustain":
 			if player.has_method("set_channel_adsr_sustain"):

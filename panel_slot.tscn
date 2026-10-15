@@ -64,23 +64,26 @@ custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 alignment = 0
 
-[node name="EnvelopeParamFrame" type="Control" parent="PanelRow/PanelSpacer"]
+[node name="EnvelopeControlBox" type="VBoxContainer" parent="PanelRow/PanelSpacer"]
+layout_mode = 2
+
+[node name="EnvelopeAddButton" type="Button" parent="PanelRow/PanelSpacer/EnvelopeControlBox"]
+custom_minimum_size = Vector2(24, 24)
+layout_mode = 2
+visible = false
+text = "+"
+
+[node name="EnvelopeParamFrame" type="Control" parent="PanelRow/PanelSpacer/EnvelopeControlBox"]
 custom_minimum_size = Vector2(80, 24)
 clip_contents = true
 layout_mode = 2
 visible = false
 
-[node name="EnvelopeParamSelect" type="OptionButton" parent="PanelRow/PanelSpacer/EnvelopeParamFrame"]
+[node name="EnvelopeParamSelect" type="OptionButton" parent="PanelRow/PanelSpacer/EnvelopeControlBox/EnvelopeParamFrame"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-
-[node name="EnvelopeAddButton" type="Button" parent="PanelRow/PanelSpacer"]
-custom_minimum_size = Vector2(24, 24)
-layout_mode = 2
-visible = false
-text = "+"
 
 [node name="PanelSpacerFill" type="Control" parent="PanelRow/PanelSpacer"]
 layout_mode = 2

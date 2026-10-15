@@ -16,6 +16,8 @@ const ADSR_DEFAULTS := {
 var id: String = ""
 var track_name: String = "Track"
 var soundfont_path: String = ""
+var program_index: int = -1
+var program_bank: int = 0
 var is_muted := false
 var is_solo := false
 var clips: Array = []
@@ -34,6 +36,20 @@ func set_soundfont_path(path: String) -> void:
 	if soundfont_path == path:
 		return
 	soundfont_path = path
+	emit_signal("changed")
+
+func set_program_index(value: int) -> void:
+	var clamped = clamp(value, 0, 127)
+	if program_index == clamped:
+		return
+	program_index = clamped
+	emit_signal("changed")
+
+func set_program_bank(value: int) -> void:
+	var clamped = max(0, value)
+	if program_bank == clamped:
+		return
+	program_bank = clamped
 	emit_signal("changed")
 
 func set_muted(enabled: bool) -> void:

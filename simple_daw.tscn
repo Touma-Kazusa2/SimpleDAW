@@ -1,6 +1,7 @@
-[gd_scene load_steps=13 format=3 uid="uid://dekhk22v688yc"]
+[gd_scene load_steps=14 format=3 uid="uid://dekhk22v688yc"]
 
 [ext_resource type="Script" uid="uid://cytpii3o37did" path="res://scripts/simple_daw.gd" id="2_simple_daw"]
+[ext_resource type="Script" uid="uid://bef5kpao3rs45" path="res://scripts/instrument_dialog.gd" id="3_instrument_dialog"]
 [ext_resource type="Script" uid="uid://22283bxyyskv" path="res://scripts/envelope_drag_bar.gd" id="4_envelope_drag_bar"]
 [ext_resource type="Texture2D" uid="uid://c4a8m7k66wliu" path="res://Lucid V1.2/PNG/Flat/16/Folder-Music.png" id="6_browser_icon"]
 [ext_resource type="Texture2D" uid="uid://di48c8q0cxsvx" path="res://Lucid V1.2/PNG/Flat/16/Play.png" id="7_play_icon"]
@@ -67,12 +68,6 @@ text = "MIDI"
 custom_minimum_size = Vector2(180, 32)
 layout_mode = 2
 focus_mode = 0
-
-[node name="MidiRefreshButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
-custom_minimum_size = Vector2(60, 32)
-layout_mode = 2
-focus_mode = 0
-text = "Refresh"
 
 [node name="SharedScrollButton" type="Button" parent="RootLayout/TopBar/TopBarContent"]
 custom_minimum_size = Vector2(44, 36)
@@ -217,6 +212,11 @@ layout_mode = 2
 custom_minimum_size = Vector2(22, 16)
 layout_mode = 2
 
+[node name="PanelSyncButton" type="Button" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarSpacer"]
+custom_minimum_size = Vector2(22, 16)
+layout_mode = 2
+focus_mode = 0
+
 [node name="SelectionBarFrame" type="PanelContainer" parent="RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -280,6 +280,22 @@ size_flags_vertical = 3
 [node name="MidiImportDialog" type="FileDialog" parent="."]
 
 [node name="SoundFontDialog" type="FileDialog" parent="."]
+
+[node name="InstrumentDialog" type="AcceptDialog" parent="."]
+title = "Select Instrument"
+size = Vector2i(360, 420)
+script = ExtResource("3_instrument_dialog")
+
+[node name="InstrumentSelect" type="ItemList" parent="InstrumentDialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+max_columns = 2
+same_column_width = true
+fixed_column_width = 180
 
 [node name="MidiPlayer" type="Node" parent="."]
 script = ExtResource("21_midi_player")

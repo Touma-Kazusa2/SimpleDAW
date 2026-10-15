@@ -18,87 +18,50 @@
 
 ## 用户随手记（原始输入）
 - 你可以随时把零散想法写在这里；我会整理并转移到对应分组，并标记“已整理”。
-  - （已整理）音色切换能力
-  - （已整理）轨道面板鼠标悬浮到轨道名时出现solo和mute按钮
-  - （已整理）轨道面板也可以通过中键纵向拉伸
-  - （已整理）钢琴卷帘面板,按住ctrl后左键可以框选音符
-  - （已整理）轨道面板的比例缩放有问题,最大应该是最长轨道的两倍,现在似乎超了,并且缩放比例不连续
-  - （已整理）轨道面板,播放中的音符为红色
-  - （已整理）midi设备现在是默认连接,选择按钮根本没起到作用,并且应该每次按下选择按钮时都重新检测一次设备
-  - （已整理）选区条旁边的同步按钮不见了
-  - （已整理）包络面板的添加按钮应该在名字的上面
+  - 钢琴卷帘面板音符被播放是,不仅会膨胀,还拥有白框(跟随着音符膨胀)
 
 ## Current Focus (Top 4)
-- 17 轨道面板鼠标悬浮到轨道名时出现 solo/mute 按钮
+- 28 空格播放逻辑
   - 状态: 待处理
-  - 问题描述: 轨道名区域 hover 时显示 solo/mute 按钮并可点击切换；播放时按 mute/solo 过滤
-  - 用户原话: “轨道面板鼠标悬浮到轨道名时出现solo和mute按钮”
-  修改过1次: 轨道名 hover 显示 S/M 并点击切换；播放时按 mute/solo 过滤轨道；scripts/arrangement_lane.gd, scripts/models/track_model.gd, scripts/playback_engine.gd, scripts/engine_snapshot_builder.gd; arrangement_lane._draw_track_label/_draw_track_label_buttons/_label_button_hit/_toggle_track_solo/_toggle_track_mute, track_model.set_muted/set_solo, playback_engine._capture_model_data, engine_snapshot_builder._build_tracks_cache/_build_tracks_from_data/_should_skip_track
-- 18 音色切换能力
+  - 问题描述: 按空格优先播放活动面板；若活动面板不可播放则播放非活动面板；若都不可播放则把非活动面板切到轨道面板并播放
+  - 用户原话: “现在只有全屏后能直接按空格播放,然后再退出全屏也可以,但是如果不进入全屏一次就不行,我想要的是按下空格,如果活动面板可以播放,则播放,如果不可以,则播放非活动面板,如果都不可以就把非活动面板切换成轨道面板并播放”
+  修改过1次: 空格播放按可播放面板选择目标并必要时切换到轨道面板; scripts/simple_daw.gd; simple_daw._toggle_transport_playback/_resolve_space_play_slot/_slot_can_play/_play_from_slot/_resolve_playback_mode_for_slot/_get_playhead_start_beats_for_slot
+  修改过2次: roll/piano/step 仅在 active clip 有音符时可播放，空 clip 回退到轨道面板; scripts/simple_daw.gd; simple_daw._slot_can_play
+  修改过3次: 空格捕获改为 _input 并避开文本输入焦点，避免需全屏才生效; scripts/simple_daw.gd; simple_daw._input/_is_text_input_focused
+- 29 轨道面板播放头可拖动
   - 状态: 待处理
-  - 问题描述: 按轨道切换音色；点击 Browser 的 track 名弹出音色选择框
-  - 用户原话: “音色切换能力”
-  修改过1次: 点击 Browser track 名时弹出 SoundFont 选择框；scripts/simple_daw.gd; simple_daw._on_track_tree_track_selected
-- 19 轨道面板中键纵向拉伸
-  - 状态: 待处理
-  - 问题描述: 中键拖拽统一缩放全部轨道行高度（现有为逐行左键拉伸）
-  - 用户原话: “轨道面板也可以通过中键纵向拉伸”
-  修改过1次: 中键拖拽统一缩放全部轨道行高度；scripts/arrangement_lane.gd; arrangement_lane._begin_global_resize/_update_global_resize/_end_global_resize/_gui_input
+  - 问题描述: 播放头支持拖动，且可拖拽时鼠标样式要变化
+  - 用户原话: “轨道面板的播放头应该可以拖动”
+  修改过2次: 播放头拖动+修复参数重名警告; scripts/arrangement_lane.gd, scripts/panel_slot.gd, scripts/simple_daw.gd; arrangement_lane._try_begin_playhead_drag/_update_playhead_drag/_gui_input, panel_slot._on_arrangement_playhead_drag_started/_on_arrangement_playhead_time_changed, simple_daw._on_arrangement_playhead_drag_started/_on_arrangement_playhead_time_changed
+  修改过3次: 播放头可拖拽区域 hover 时切换鼠标样式; scripts/arrangement_lane.gd; arrangement_lane._is_playhead_hovered/_try_begin_playhead_drag/_end_playhead_drag/_gui_input
 - 20 钢琴卷帘 Ctrl+左键框选音符
   - 状态: 待处理
   - 问题描述: 钢琴卷帘支持按住 Ctrl + 左键框选音符
   - 用户原话: “钢琴卷帘面板,按住ctrl后左键可以框选音符”
-  修改过1次: Ctrl+左键框选并高亮选中音符；scripts/input_controller.gd, scripts/notes_model.gd, scripts/notes_view.gd; input_controller._begin_box_selection/_update_box_selection/_end_box_selection, notes_model.set_selection/is_note_selected, notes_view._draw_note/_draw
+  修改过1次: Ctrl+左键框选并高亮选中音符; scripts/input_controller.gd, scripts/notes_model.gd, scripts/notes_view.gd; input_controller._begin_box_selection/_update_box_selection/_end_box_selection, notes_model.set_selection/is_note_selected, notes_view._draw_note/_draw
+- 27 切换 MIDI 后部分轨道不发声
+  - 状态: 暂缓（用户排查中）
+  - 问题描述: 导入/切换 MIDI 后偶发部分轨道无声音，复现不稳定，需要更多信息
+  - 用户原话: “有时候切换mid文件后,会出现一些轨道不发声的问题,并且复现切换不一定会出现问题,总之不知道为什么”
+  修改过1次: 非发声轨道灰化; scripts/arrangement_lane.gd; arrangement_lane._draw_tracks/_draw_track_clips/_draw_clip_label/_draw_clip_notes/_draw_external_drag_preview/_dim_color/_is_track_solo/_is_track_muted/_has_any_solo_track
 
-## Envelope Panel (已处理)
-- 4 包络面板可以纵向放大,使得其右侧的滑动条有意义
-  修改过1次: 新增纵向缩放(中键拖拽)与包络面板纵向滚动条支持；文件: scripts/envelope_lane.gd, scripts/panel_slot.gd
-  - 用户原话: 已剪切至 `resolved_user_quotes/4_包络面板纵向放大.md`
-- 5 包络面板的高度根据其属性设置,初始化时铺满面板
-  修改过1次: 加入 v1 参数范围表并在参数切换时重置缩放/滚动以铺满；文件: scripts/envelope_lane.gd
-  - 用户原话: 已剪切至 `resolved_user_quotes/5_包络面板高度铺满.md`
-  - 说明: 若不同参数上下限一致则无需处理；若不一致需定义映射范围。
-- 6 包络面板的默认线在有点的时候,最后一个点后面画随其高度的水平直线而非先垂直向下到中间位置
-  修改过1次: 末尾默认线改为沿最后一个点的高度水平延伸; 文件: scripts/envelope_lane.gd
-  修改过2次: 默认线改为蓝色；末尾水平线用橙色，若高度为0则沿用默认线颜色；文件: scripts/envelope_lane.gd
-- 7 包络面板可以新增自动化曲线
-  修改过1次: 增加“+”按钮自动创建新参数曲线并切换选中；文件: scripts/panel_slot.gd, panel_slot.tscn
-  - 用户原话: 已剪切至 `resolved_user_quotes/7_包络面板新增自动化曲线.md`
-
-## Resolved
-- 已解决内容已移动到 `issue_resolved.md`
-
-## Backlog (Untriaged)
-- U1 包络面板画点卡顿
-  - 问题描述: 低频、隐性、需定位
-  - 争议: 你不认同“实时画实时看导致卡顿”的解释
-  - 用户原话: “有时候包络面板画点的时候会卡顿”“出现频率有点低,感觉可能属于很隐性的bug”“这种实时画实时看在大部分时间都没感受到卡顿,说明原因不在于它”
-  修改过3次: 追加问题描述并保留用户原话; issue.md; N/A
+## Backlog (Other Open)
 - U5 MIDI 导入量化与自动化播放频率
+  - 状态: 待处理
   - 问题描述: 导入量化、渲染与播放分离、线性插值发 event、提供可选频率/选项
   - 用户原话: “我关心的是midi文件导入后有没有根据时间分辨率做量化的问题,以及我希望渲染和实际输入给播放系统不同,应该按照daw流行的频率或者有个有个选择框用户可以选择,根据点与点之间线性插值得到数据发出event.”
   修改过3次: 追加问题描述并保留用户原话; issue.md; N/A
 - U6 自动化已生效的反馈
+  - 状态: 待处理
   - 问题描述: 导入 MIDI 后修改 pan 包络可听到效果，说明播放路径已接入
   - 用户原话: “实际自动化/渲染曲线现在是存在的,我已经通过导入一个mid文件后修改pan的包络并观察到了效果”
   修改过3次: 追加问题描述并保留用户原话; issue.md; N/A
-- 21 轨道面板比例缩放异常
+- U1 包络面板画点卡顿
   - 状态: 待处理
-  - 问题描述: 轨道面板缩放比例上限应为最长轨道的 2 倍，且缩放比例连续
-  - 用户原话: “轨道面板的比例缩放有问题,最大应该是最长轨道的两倍,现在似乎超了,并且缩放比例不连续”
-- 22 轨道面板播放中音符为红色
-  - 状态: 待处理
-  - 问题描述: 轨道面板播放中的音符显示为红色
-  - 用户原话: “轨道面板,播放中的音符为红色”
-- 23 MIDI 设备选择与刷新
-  - 状态: 待处理
-  - 问题描述: 设备选择按钮需生效，按下时应重新检测设备；当前行为为默认连接
-  - 用户原话: “midi设备现在是默认连接,选择按钮根本没起到作用,并且应该每次按下选择按钮时都重新检测一次设备”
-- 24 选区条旁边的同步按钮不见了
-  - 状态: 待处理
-  - 问题描述: 选区条旁的同步按钮缺失，需要恢复
-  - 用户原话: “选区条旁边的同步按钮不见了”
-- 25 包络面板添加按钮位置
-  - 状态: 待处理
-  - 问题描述: 包络面板添加按钮应在名字的上方
-  - 用户原话: “包络面板的添加按钮应该在名字的上面”
+  - 问题描述: 低频、隐性、需定位
+  - 争议: 你不认同“实时画实时看导致卡顿”的解释
+  - 用户原话: “有时候包络面板画点的时候会卡顿”“出现频率有点低,感觉可能属于很隐性的bug”“这种实时画实时看在大部分时间都没感受到卡顿,说明原因不在于它”
+  修改过3次: 追加问题描述并保留用户原话; issue.md; N/A
+
+## Resolved
+- 已解决内容已移动到 `issue_resolved.md`

@@ -4,6 +4,7 @@ class_name EngineCore
 
 const DEFAULT_BPM := 120.0
 const DEFAULT_PROGRAM := 0
+const DEFAULT_BANK := 0
 const DEFAULT_VELOCITY := 100
 const MAX_CHANNELS := 16
 
@@ -80,19 +81,26 @@ func build_chase_controls(time_beats: float) -> Array:
 		var player: Node = event.get("player")
 		if player == null:
 			continue
+		var program = int(event.get("program", DEFAULT_PROGRAM))
+		var bank = int(event.get("bank", DEFAULT_BANK))
 		if not program_by_player.has(player):
 			program_by_player[player] = {}
 		var player_map: Dictionary = program_by_player[player]
-		player_map[int(event.get("channel", 0))] = int(event.get("program", DEFAULT_PROGRAM))
+		player_map[int(event.get("channel", 0))] = {
+			"program": program,
+			"bank": bank
+		}
 		program_by_player[player] = player_map
 	for player in program_by_player.keys():
 		var channel_map: Dictionary = program_by_player[player]
 		for channel in channel_map.keys():
+			var program_data = channel_map[channel]
 			emitted.append({
 				"type": "program",
 				"time": time_beats,
 				"channel": int(channel),
-				"program": int(channel_map[channel]),
+				"program": int(program_data.get("program", DEFAULT_PROGRAM)),
+				"bank": int(program_data.get("bank", DEFAULT_BANK)),
 				"player": player
 			})
 	var last_cc: Dictionary = {}

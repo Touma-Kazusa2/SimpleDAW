@@ -50,6 +50,16 @@ func set_default_soundfont_path(path: String) -> void:
 	default_soundfont_path = path
 	_rebuild_routes()
 
+func get_bank_for_path(path: String) -> Bank:
+	return _get_bank_for_path(path)
+
+func get_bank_for_track(track: Node) -> Bank:
+	var path = _resolve_soundfont_path(track)
+	return _get_bank_for_path(path)
+
+func resolve_soundfont_path_for_track(track: Node) -> String:
+	return _resolve_soundfont_path(track)
+
 func get_route_for_track(track_index: int, _track: Node) -> Dictionary:
 	if track_index >= 0 and track_index < _route_by_track.size():
 		return _route_by_track[track_index]

@@ -5,6 +5,8 @@ signal track_selected(track_index: int)
 signal clip_double_clicked(track_index: int, clip_index: int, time_beats: float, pitch: float)
 signal selection_preview(start_beats: float, end_beats: float)
 signal selection_committed(start_beats: float, end_beats: float)
+signal playhead_drag_started
+signal playhead_time_changed(time_beats: float)
 signal content_height_changed
 signal zoom_request(local_x: float, direction: int)
 signal zoom_reset_requested(local_x: float)
@@ -52,6 +54,8 @@ const COLOR_CLIP_LINKED = Color(0.95, 0.82, 0.2, 0.95)
 const COLOR_CLIP_LINKED_PREVIEW = Color(0.95, 0.82, 0.2, 0.6)
 const COLOR_CLIP_TEXT = Color(0.92, 0.96, 1.0, 0.95)
 const COLOR_NOTE = Color(0.95, 0.55, 0.2, 0.7)
+const COLOR_NOTE_ACTIVE = Color(0.1, 0.4, 0.95, 0.9)
+const NOTE_ACTIVE_HOLD_SECONDS := 0.08
 const COLOR_SELECTION = Color(0.95, 0.55, 0.2, 0.22)
 const COLOR_SELECTION_BORDER = Color(0.95, 0.55, 0.2, 0.75)
 const COLOR_PLAYHEAD = Color(0.95, 0.7, 0.3, 0.9)
@@ -82,6 +86,8 @@ const TEMPO_ZOOM_DRAG_SCALE := 0.01
 const LABEL_BUTTON_SIZE := 18.0
 const LABEL_BUTTON_GAP := 4.0
 const LABEL_BUTTON_PADDING := 4.0
+const DIM_INAUDIBLE := 0.4
+const PLAYHEAD_DRAG_TOLERANCE := 6.0
 
 var project_model: Node = null
 var selected_track_index := -1
@@ -120,6 +126,7 @@ var _tempo_last_draw_time := -1.0
 var _tempo_last_draw_bpm := 0.0
 var _tempo_last_delete_time := -1.0
 var _tempo_zoom := 1.0
+var _dragging_playhead := false
 var _global_resize_active := false
 var _global_resize_start_y := 0.0
 var _global_resize_base_row := 0.0
@@ -271,27 +278,42 @@ func _draw_tempo_map() -> void:
 	var tempo_range = _tempo_display_range()
 	var bpm_min = tempo_range.x
 	var bpm_max = tempo_range.y
+	var bpm_range = bpm_max - bpm_min
+	if abs(bpm_range) <= 0.00001:
+		return
 	var points: Array = []
 	for event in events:
 		var time_beats = float(event.get("time", 0.0))
 		var bpm = float(event.get("bpm", bpm_min))
+		if not is_finite(time_beats) or not is_finite(bpm):
+			continue
 		var x = lane_left + time_beats * pixels_per_beat - view_scroll_x
-		var t = (bpm - bpm_min) / (bpm_max - bpm_min)
+		var t = (bpm - bpm_min) / bpm_range
+		if not is_finite(x) or not is_finite(t):
+			continue
 		var y = inner.position.y + inner.size.y * (1.0 - t)
+		if not is_finite(y):
+			continue
 		points.append(Vector2(x, y))
 	if points.is_empty():
 		return
 	var draw_points = points.duplicate()
 	var last = points[points.size() - 1]
-	points.append(Vector2(lane_left + inner.size.x + tempo_map_padding, last.y))
+	var end_x = lane_left + inner.size.x + tempo_map_padding
+	if end_x < last.x:
+		end_x = last.x
+	points.append(Vector2(end_x, last.y))
 	var prev = points[0]
 	for i in range(1, points.size()):
 		var cur = points[i]
 		draw_line(prev, cur, COLOR_TEMPO_CURVE, 2.0)
 		prev = cur
+	var bottom_y = inner.position.y + inner.size.y
+	for pos in points:
+		bottom_y = max(bottom_y, pos.y + tempo_map_padding)
 	var fill = PackedVector2Array(points)
-	fill.append(Vector2(points[points.size() - 1].x, inner.position.y + inner.size.y))
-	fill.append(Vector2(points[0].x, inner.position.y + inner.size.y))
+	fill.append(Vector2(points[points.size() - 1].x, bottom_y))
+	fill.append(Vector2(points[0].x, bottom_y))
 	draw_colored_polygon(fill, COLOR_TEMPO_FILL)
 	for pos in draw_points:
 		if pos.x >= inner.position.x - TEMPO_POINT_RADIUS and pos.x <= inner.position.x + inner.size.x + TEMPO_POINT_RADIUS:
@@ -324,8 +346,14 @@ func _draw_tracks() -> void:
 	if track_count <= 0:
 		return
 	var lane_rect = _get_lane_rect()
+	var any_solo = _has_any_solo_track()
 	var row_y = _content_top() - view_scroll_y
 	for i in range(track_count):
+		var track = _get_track(i)
+		var is_solo = _is_track_solo(track)
+		var is_muted = _is_track_muted(track)
+		var audible = (not is_muted) and (not any_solo or is_solo)
+		var dim_factor = 1.0 if audible else DIM_INAUDIBLE
 		var height = _get_track_height(i)
 		var row_rect = Rect2(Vector2(0.0, row_y), Vector2(size.x, height))
 		if row_rect.position.y > size.y or row_rect.position.y + row_rect.size.y < 0.0:
@@ -337,10 +365,10 @@ func _draw_tracks() -> void:
 		var track_clip_height = _get_track_clip_height(height)
 		var label_rect = Rect2(Vector2(0.0, row_y + (height - track_clip_height) * 0.5), Vector2(label_width, track_clip_height))
 		draw_rect(label_rect, COLOR_TRACK_BG, true)
-		_draw_track_label(i, label_rect)
-		_draw_track_clips(i, lane_rect)
+		_draw_track_label(i, label_rect, dim_factor)
+		_draw_track_clips(i, lane_rect, dim_factor)
 		if _external_drag_active and _external_drag_track_index == i:
-			_draw_external_drag_preview(i, lane_rect)
+			_draw_external_drag_preview(i, lane_rect, dim_factor)
 		row_y += height + row_spacing
 
 func _draw_track_grid(row_rect: Rect2, lane_rect: Rect2) -> void:
@@ -381,19 +409,20 @@ func _draw_global_grid() -> void:
 		var color = COLOR_MEASURE if (beat % measure == 0) else COLOR_GRID
 		draw_line(Vector2(x, lane_rect.position.y), Vector2(x, lane_rect.position.y + lane_rect.size.y), color, 1.0)
 
-func _draw_track_label(track_index: int, label_rect: Rect2) -> void:
+func _draw_track_label(track_index: int, label_rect: Rect2, dim_factor: float) -> void:
 	var label = _get_track_name(track_index)
 	var font = get_theme_default_font()
 	var font_size = get_theme_default_font_size()
 	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, label_rect.size.x, font_size)
 	var text_x = label_rect.position.x + left_padding
 	var text_y = label_rect.position.y + (label_rect.size.y - text_size.y) * 0.5 + font.get_ascent(font_size)
-	draw_string(font, Vector2(text_x, text_y), label, HORIZONTAL_ALIGNMENT_LEFT, label_rect.size.x - left_padding, font_size, COLOR_TRACK_TEXT)
-	draw_rect(label_rect, COLOR_TRACK_FRAME, false, 2.0)
+	draw_rect(label_rect, _dim_color(COLOR_TRACK_BG, dim_factor), true)
+	draw_string(font, Vector2(text_x, text_y), label, HORIZONTAL_ALIGNMENT_LEFT, label_rect.size.x - left_padding, font_size, _dim_color(COLOR_TRACK_TEXT, dim_factor))
+	draw_rect(label_rect, _dim_color(COLOR_TRACK_FRAME, dim_factor), false, 2.0)
 	if track_index == _hover_label_track_index:
-		_draw_track_label_buttons(track_index, label_rect)
+		_draw_track_label_buttons(track_index, label_rect, dim_factor)
 
-func _draw_track_label_buttons(track_index: int, label_rect: Rect2) -> void:
+func _draw_track_label_buttons(track_index: int, label_rect: Rect2, dim_factor: float) -> void:
 	var track = _get_track(track_index)
 	if track == null or label_rect.size.x <= 0.0 or label_rect.size.y <= 0.0:
 		return
@@ -404,34 +433,34 @@ func _draw_track_label_buttons(track_index: int, label_rect: Rect2) -> void:
 		return
 	var is_solo = track.has_method("get") and bool(track.get("is_solo"))
 	var is_muted = track.has_method("get") and bool(track.get("is_muted"))
-	_draw_label_button(rects["solo"], "S", is_solo, font, font_size)
-	_draw_label_button(rects["mute"], "M", is_muted, font, font_size)
+	_draw_label_button(rects["solo"], "S", is_solo, font, font_size, dim_factor)
+	_draw_label_button(rects["mute"], "M", is_muted, font, font_size, dim_factor)
 
-func _draw_label_button(rect: Rect2, label: String, active: bool, font: Font, font_size: int) -> void:
+func _draw_label_button(rect: Rect2, label: String, active: bool, font: Font, font_size: int, dim_factor: float) -> void:
 	var fill = COLOR_LABEL_BUTTON_ACTIVE if active else COLOR_LABEL_BUTTON_BG
-	draw_rect(rect, fill, true)
-	draw_rect(rect, COLOR_LABEL_BUTTON_BORDER, false, 1.0)
+	draw_rect(rect, _dim_color(fill, dim_factor), true)
+	draw_rect(rect, _dim_color(COLOR_LABEL_BUTTON_BORDER, dim_factor), false, 1.0)
 	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size)
 	var text_pos = Vector2(
 		rect.position.x + (rect.size.x - text_size.x) * 0.5,
 		rect.position.y + (rect.size.y - text_size.y) * 0.5 + font.get_ascent(font_size)
 	)
-	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, font_size, COLOR_LABEL_BUTTON_TEXT)
+	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_LEFT, rect.size.x, font_size, _dim_color(COLOR_LABEL_BUTTON_TEXT, dim_factor))
 
 func _label_button_rects(label_rect: Rect2) -> Dictionary:
-	var size = min(LABEL_BUTTON_SIZE, label_rect.size.y - LABEL_BUTTON_PADDING * 2.0)
-	if size <= 0.0:
+	var button_size = min(LABEL_BUTTON_SIZE, label_rect.size.y - LABEL_BUTTON_PADDING * 2.0)
+	if button_size <= 0.0:
 		return {}
-	var right_x = label_rect.position.x + label_rect.size.x - LABEL_BUTTON_PADDING - size
-	var y = label_rect.position.y + (label_rect.size.y - size) * 0.5
-	var mute_rect = Rect2(Vector2(right_x, y), Vector2(size, size))
-	var solo_rect = Rect2(Vector2(right_x - size - LABEL_BUTTON_GAP, y), Vector2(size, size))
+	var right_x = label_rect.position.x + label_rect.size.x - LABEL_BUTTON_PADDING - button_size
+	var y = label_rect.position.y + (label_rect.size.y - button_size) * 0.5
+	var mute_rect = Rect2(Vector2(right_x, y), Vector2(button_size, button_size))
+	var solo_rect = Rect2(Vector2(right_x - button_size - LABEL_BUTTON_GAP, y), Vector2(button_size, button_size))
 	return {
 		"solo": solo_rect,
 		"mute": mute_rect
 	}
 
-func _draw_track_clips(track_index: int, lane_rect: Rect2) -> void:
+func _draw_track_clips(track_index: int, lane_rect: Rect2, dim_factor: float) -> void:
 	var track = _get_track(track_index)
 	if track == null:
 		return
@@ -459,14 +488,15 @@ func _draw_track_clips(track_index: int, lane_rect: Rect2) -> void:
 		var is_hovered = track_index == _hover_track_index and clip_index == _hover_clip_index
 		if is_hovered:
 			border = COLOR_CLIP_HOVER
+		border = _dim_color(border, dim_factor)
 		var fill = border
 		fill.a = 0.05
 		draw_rect(clipped, fill, true)
 		draw_rect(clipped, border, false, 2.0)
-		_draw_clip_label(entry, clipped)
-		_draw_clip_notes(entry, clip_rect, lane_rect)
+		_draw_clip_label(entry, clipped, dim_factor)
+		_draw_clip_notes(entry, clip_rect, lane_rect, dim_factor)
 
-func _draw_clip_notes(entry: Dictionary, clip_rect: Rect2, lane_rect: Rect2) -> void:
+func _draw_clip_notes(entry: Dictionary, clip_rect: Rect2, lane_rect: Rect2, dim_factor: float) -> void:
 	var clip = entry.get("clip")
 	if clip == null:
 		return
@@ -478,6 +508,13 @@ func _draw_clip_notes(entry: Dictionary, clip_rect: Rect2, lane_rect: Rect2) -> 
 	var length_beats = _get_display_length(entry)
 	if length_beats <= 0.0:
 		return
+	var clip_start = float(entry.get("start", 0.0))
+	var playhead = playhead_time_beats
+	var has_playhead = playhead >= 0.0
+	var hold_beats = 0.0
+	if has_playhead:
+		var bpm = _tempo_bpm_at(playhead)
+		hold_beats = NOTE_ACTIVE_HOLD_SECONDS * bpm / 60.0
 	var pitch_min = min_pitch
 	var pitch_max = max_pitch
 	var clip_pitch_min = pitch_max
@@ -512,7 +549,14 @@ func _draw_clip_notes(entry: Dictionary, clip_rect: Rect2, lane_rect: Rect2) -> 
 		var clipped = rect.intersection(clip_rect).intersection(lane_rect)
 		if clipped.size.x <= 0.0 or clipped.size.y <= 0.0:
 			continue
-		draw_rect(clipped, COLOR_NOTE, true)
+		var note_color = COLOR_NOTE
+		if has_playhead:
+			var note_global_start = clip_start + note_start
+			var note_global_end = clip_start + note_end
+			if playhead >= note_global_start and playhead <= note_global_end + hold_beats:
+				note_color = COLOR_NOTE_ACTIVE
+		note_color = _dim_color(note_color, dim_factor)
+		draw_rect(clipped, note_color, true)
 
 func _draw_clip_selection(entry: Dictionary, clip_rect: Rect2, lane_rect: Rect2) -> void:
 	if selection_start_beats < 0.0 or selection_end_beats <= selection_start_beats:
@@ -549,7 +593,7 @@ func _draw_global_selection() -> void:
 	draw_rect(clipped, COLOR_SELECTION, true)
 	draw_rect(clipped, COLOR_SELECTION_BORDER, false, 1.0)
 
-func _draw_clip_label(entry: Dictionary, clip_rect: Rect2) -> void:
+func _draw_clip_label(entry: Dictionary, clip_rect: Rect2, dim_factor: float) -> void:
 	var clip = entry.get("clip")
 	var label = ""
 	if clip != null:
@@ -561,7 +605,40 @@ func _draw_clip_label(entry: Dictionary, clip_rect: Rect2) -> void:
 	var text_size = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, clip_rect.size.x, font_size)
 	var text_x = clip_rect.position.x + left_padding
 	var text_y = clip_rect.position.y + (clip_rect.size.y - text_size.y) * 0.5 + font.get_ascent(font_size)
-	draw_string(font, Vector2(text_x, text_y), label, HORIZONTAL_ALIGNMENT_LEFT, clip_rect.size.x - left_padding, font_size, COLOR_CLIP_TEXT)
+	draw_string(font, Vector2(text_x, text_y), label, HORIZONTAL_ALIGNMENT_LEFT, clip_rect.size.x - left_padding, font_size, _dim_color(COLOR_CLIP_TEXT, dim_factor))
+
+func _try_begin_playhead_drag(local_pos: Vector2) -> bool:
+	if not _is_playhead_hovered(local_pos):
+		return false
+	_dragging_playhead = true
+	mouse_default_cursor_shape = Control.CURSOR_HSIZE
+	emit_signal("playhead_drag_started")
+	_update_playhead_drag(local_pos)
+	return true
+
+func _update_playhead_drag(local_pos: Vector2) -> void:
+	if pixels_per_beat <= 0.0:
+		return
+	var lane_x = local_pos.x + view_scroll_x - label_width
+	var time_beats = max(0.0, lane_x / pixels_per_beat)
+	playhead_time_beats = time_beats
+	emit_signal("playhead_time_changed", time_beats)
+	queue_redraw()
+
+func _end_playhead_drag() -> void:
+	_dragging_playhead = false
+	mouse_default_cursor_shape = Control.CURSOR_ARROW
+
+func _is_playhead_hovered(local_pos: Vector2) -> bool:
+	if playhead_time_beats < 0.0 or pixels_per_beat <= 0.0:
+		return false
+	var lane_rect = _get_lane_rect()
+	if local_pos.x < lane_rect.position.x or local_pos.x > lane_rect.position.x + lane_rect.size.x:
+		return false
+	if local_pos.y < lane_rect.position.y or local_pos.y > lane_rect.position.y + lane_rect.size.y:
+		return false
+	var playhead_x = lane_rect.position.x + playhead_time_beats * pixels_per_beat - view_scroll_x
+	return abs(local_pos.x - playhead_x) <= PLAYHEAD_DRAG_TOLERANCE
 
 func _gui_input(event: InputEvent) -> void:
 	if _handle_tempo_map_input(event):
@@ -604,6 +681,9 @@ func _gui_input(event: InputEvent) -> void:
 			return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			if _try_begin_playhead_drag(event.position):
+				accept_event()
+				return
 			var label_hit = _label_button_hit(event.position)
 			if not label_hit.is_empty():
 				var track_index = int(label_hit.get("track_index", -1))
@@ -624,6 +704,10 @@ func _gui_input(event: InputEvent) -> void:
 				return
 			_begin_drag(event.position)
 		else:
+			if _dragging_playhead:
+				_end_playhead_drag()
+				accept_event()
+				return
 			if _resizing_track_index >= 0:
 				_end_track_resize()
 				accept_event()
@@ -644,13 +728,23 @@ func _gui_input(event: InputEvent) -> void:
 		_update_global_resize(event.position.y)
 		accept_event()
 		return
+	if event is InputEventMouseMotion and _dragging_playhead:
+		mouse_default_cursor_shape = Control.CURSOR_HSIZE
+		_update_playhead_drag(event.position)
+		accept_event()
+		return
 	if event is InputEventMouseMotion and _resizing_track_index >= 0:
 		_update_track_resize(event.position.y)
 		accept_event()
 		return
 	if event is InputEventMouseMotion and _resizing_track_index < 0 and _drag_mode == "" and not _selection_dragging:
 		var resize_index = _resize_track_index_at_pos(event.position)
-		mouse_default_cursor_shape = Control.CURSOR_VSIZE if resize_index >= 0 else Control.CURSOR_ARROW
+		if resize_index >= 0:
+			mouse_default_cursor_shape = Control.CURSOR_VSIZE
+		elif _is_playhead_hovered(event.position):
+			mouse_default_cursor_shape = Control.CURSOR_HSIZE
+		else:
+			mouse_default_cursor_shape = Control.CURSOR_ARROW
 	if event is InputEventMouseMotion and _selection_dragging:
 		_update_selection_drag(event.position)
 		accept_event()
@@ -919,6 +1013,31 @@ func _get_track(track_index: int) -> Node:
 		return null
 	return project_model.tracks[track_index]
 
+func _is_track_solo(track: Node) -> bool:
+	if track == null:
+		return false
+	return bool(track.get("is_solo"))
+
+func _is_track_muted(track: Node) -> bool:
+	if track == null:
+		return false
+	return bool(track.get("is_muted"))
+
+func _has_any_solo_track() -> bool:
+	for i in range(_get_track_count()):
+		if _is_track_solo(_get_track(i)):
+			return true
+	return false
+
+func _dim_color(color: Color, factor: float) -> Color:
+	if factor >= 0.999:
+		return color
+	var gray = (color.r + color.g + color.b) / 3.0
+	var gray_color = Color(gray, gray, gray, color.a)
+	var mixed = color.lerp(gray_color, 1.0 - factor)
+	mixed.a = color.a
+	return mixed
+
 func _get_track_name(track_index: int) -> String:
 	var track = _get_track(track_index)
 	if track == null:
@@ -936,9 +1055,9 @@ func _get_track_height(track_index: int) -> float:
 func _label_rect_for_track(track_index: int) -> Rect2:
 	var height = _get_track_height(track_index)
 	var row_y = _row_y(track_index)
-	var clip_height = _get_track_clip_height(height)
-	var y = row_y + (height - clip_height) * 0.5
-	return Rect2(Vector2(0.0, y), Vector2(label_width, clip_height))
+	var label_clip_height = _get_track_clip_height(height)
+	var y = row_y + (height - label_clip_height) * 0.5
+	return Rect2(Vector2(0.0, y), Vector2(label_width, label_clip_height))
 
 func _set_track_height(track_index: int, height: float) -> void:
 	var track = _get_track(track_index)
@@ -1221,6 +1340,19 @@ func _get_tempo_events() -> Array:
 		fallback_bpm = float(project_model.transport.tempo)
 	return [{"time": 0.0, "bpm": fallback_bpm}]
 
+func _tempo_bpm_at(time_beats: float) -> float:
+	var events = _get_tempo_events()
+	if events.is_empty():
+		return 120.0
+	var current = float(events[0].get("bpm", 120.0))
+	for event in events:
+		var t = float(event.get("time", 0.0))
+		if time_beats + 0.00001 >= t:
+			current = float(event.get("bpm", current))
+		else:
+			break
+	return max(1.0, current)
+
 func _set_tempo_events(events: Array) -> void:
 	if project_model == null or project_model.transport == null:
 		return
@@ -1367,7 +1499,7 @@ func _handle_tempo_map_input(event: InputEvent) -> bool:
 			return true
 	return false
 
-func _draw_external_drag_preview(track_index: int, lane_rect: Rect2) -> void:
+func _draw_external_drag_preview(track_index: int, lane_rect: Rect2, dim_factor: float) -> void:
 	if _external_drag_clip == null:
 		return
 	var entry = {
@@ -1386,8 +1518,9 @@ func _draw_external_drag_preview(track_index: int, lane_rect: Rect2) -> void:
 		var track = _get_track(track_index)
 		if not is_used and track != null and owner_id == str(track.id):
 			border = COLOR_CLIP_BORDER
+	border = _dim_color(border, dim_factor)
 	draw_rect(clipped, border, false, 2.0)
-	_draw_clip_notes(entry, clip_rect, lane_rect)
+	_draw_clip_notes(entry, clip_rect, lane_rect, dim_factor)
 
 func _remove_or_unplace_clip(track_index: int, entry: Dictionary) -> void:
 	var track = _get_track(track_index)

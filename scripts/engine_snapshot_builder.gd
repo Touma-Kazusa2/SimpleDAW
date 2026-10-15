@@ -6,6 +6,7 @@ const PLAYBACK_MODE_TRACKS := "tracks"
 const PLAYBACK_MODE_CLIP := "clip"
 const DEFAULT_BPM := 120.0
 const DEFAULT_PROGRAM := 0
+const DEFAULT_BANK := 0
 const DEFAULT_VELOCITY := 100
 const MIN_NOTE_LENGTH_BEATS := 0.0001
 const MAX_CHANNELS := 16
@@ -222,7 +223,8 @@ func _build_tracks_cache(project_model: Node, track_router: Node, midi_player: N
 		var channel = int(route.get("channel", _resolve_channel(track_index)))
 		_register_player(snapshot, player)
 		var program = _track_program(track)
-		_add_program_event(snapshot, 0.0, player, channel, program)
+		var bank = _track_bank(track)
+		_add_program_event(snapshot, 0.0, player, channel, program, bank)
 		_add_adsr_events(snapshot, track, player, channel)
 		var arrangement = track.get("arrangement") if track.has_method("get") else []
 		for entry in arrangement:
@@ -246,7 +248,8 @@ func _build_clip_cache(project_model: Node, track_index: int, clip_index: int, t
 	var channel = int(route.get("channel", _resolve_channel(track_index)))
 	_register_player(snapshot, player)
 	var program = _track_program(track)
-	_add_program_event(snapshot, 0.0, player, channel, program)
+	var bank = _track_bank(track)
+	_add_program_event(snapshot, 0.0, player, channel, program, bank)
 	_add_adsr_events(snapshot, track, player, channel)
 	var clip_length = float(clip.get("clip_length_beats")) if clip.has_method("get") else 0.0
 	_add_clip_events(snapshot, clip, player, channel, 0.0, clip_length)
@@ -265,7 +268,8 @@ func _build_tracks_from_data(model_data: Dictionary, track_routes: Array, defaul
 		var channel = int(route.get("channel", _resolve_channel(track_index)))
 		_register_player(snapshot, player)
 		var program = _track_program_from_data(track_data)
-		_add_program_event(snapshot, 0.0, player, channel, program)
+		var bank = _track_bank_from_data(track_data)
+		_add_program_event(snapshot, 0.0, player, channel, program, bank)
 		_add_adsr_events_from_data(snapshot, track_data, player, channel)
 		var arrangement: Array = track_data.get("arrangement", [])
 		for entry in arrangement:
@@ -289,7 +293,8 @@ func _build_clip_from_data(model_data: Dictionary, track_index: int, clip_index:
 	var channel = int(route.get("channel", _resolve_channel(track_index)))
 	_register_player(snapshot, player)
 	var program = _track_program_from_data(track_data)
-	_add_program_event(snapshot, 0.0, player, channel, program)
+	var bank = _track_bank_from_data(track_data)
+	_add_program_event(snapshot, 0.0, player, channel, program, bank)
 	_add_adsr_events_from_data(snapshot, track_data, player, channel)
 	var clip_length = float(clip_data.get("clip_length_beats", 0.0))
 	_add_clip_data_events(snapshot, clip_data, player, channel, 0.0, clip_length)
@@ -456,11 +461,19 @@ func _add_cc_events(snapshot: Dictionary, clip: Node, player: Node, channel: int
 			})
 			snapshot["max_event_beats"] = max(snapshot["max_event_beats"], time_beats)
 
-func _add_program_event(snapshot: Dictionary, time_beats: float, player: Node, channel: int, program: int) -> void:
+func _add_program_event(
+	snapshot: Dictionary,
+	time_beats: float,
+	player: Node,
+	channel: int,
+	program: int,
+	bank: int = DEFAULT_BANK
+) -> void:
 	snapshot["program_events"].append({
 		"time": time_beats,
 		"channel": channel,
 		"program": program,
+		"bank": bank,
 		"player": player
 	})
 	snapshot["events"].append({
@@ -468,6 +481,7 @@ func _add_program_event(snapshot: Dictionary, time_beats: float, player: Node, c
 		"type": "program",
 		"channel": channel,
 		"program": program,
+		"bank": bank,
 		"player": player
 	})
 
@@ -726,14 +740,32 @@ func _track_program(track: Node) -> int:
 		return DEFAULT_PROGRAM
 	var label = ""
 	if track.has_method("get"):
+		var program_index = int(track.get("program_index"))
+		if program_index >= 0:
+			return clamp(program_index, 0, 127)
 		label = str(track.get("track_name"))
 	return _program_from_label(label)
 
 func _track_program_from_data(track_data: Dictionary) -> int:
 	if track_data.is_empty():
 		return DEFAULT_PROGRAM
+	var program_index = int(track_data.get("program_index", -1))
+	if program_index >= 0:
+		return clamp(program_index, 0, 127)
 	var label = str(track_data.get("track_name", ""))
 	return _program_from_label(label)
+
+func _track_bank(track: Node) -> int:
+	if track == null:
+		return DEFAULT_BANK
+	if track.has_method("get"):
+		return max(DEFAULT_BANK, int(track.get("program_bank")))
+	return DEFAULT_BANK
+
+func _track_bank_from_data(track_data: Dictionary) -> int:
+	if track_data.is_empty():
+		return DEFAULT_BANK
+	return max(DEFAULT_BANK, int(track_data.get("program_bank", DEFAULT_BANK)))
 
 func _program_from_label(label: String) -> int:
 	var text = _strip_channel_suffix(label)

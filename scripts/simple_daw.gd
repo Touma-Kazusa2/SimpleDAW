@@ -8,6 +8,7 @@ const MIDI_IMPORTER = preload("res://scripts/midi_importer.gd")
 const MIDI_EXPORTER = preload("res://scripts/midi_exporter.gd")
 const PLAYBACK_ENGINE = preload("res://scripts/playback_engine.gd")
 const SOUNDFONT_MANAGER = preload("res://scripts/soundfont_manager.gd")
+const SNAPSHOT_BUILDER = preload("res://scripts/engine_snapshot_builder.gd")
 const SELECTION_BAR_GAP := 4.0
 const PANEL_COLLAPSE_THRESHOLD := 6.0
 const DEBUG_SYNC := false
@@ -20,13 +21,18 @@ const TRACK_TREE_BUILD_BUDGET_MS := 22
 const ADSR_TIME_MAX := 10.0
 const ADSR_SUSTAIN_MIN_DB := -80.0
 const ADSR_SUSTAIN_MAX_DB := 0.0
+const INSTRUMENT_PREVIEW_PITCH := 60
+const INSTRUMENT_PREVIEW_VELOCITY := 100
+const INSTRUMENT_PREVIEW_SECONDS := 0.35
+const MIDI_DEVICE_NONE_ID := -2
+const MIDI_DEVICE_ALL_ID := -1
+const MIDI_DEVICE_LABEL := "midi device"
 
 @onready var browser_panel: Control = $"RootLayout/MainSplit/BrowserPanel"
 @onready var browser_toggle: Button = $"RootLayout/TopBar/TopBarContent/BrowserToggle"
 @onready var add_track_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/AddTrackButton")
 @onready var import_midi_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/ImportMidiButton")
 @onready var midi_device_option: OptionButton = get_node_or_null("RootLayout/TopBar/TopBarContent/MidiDeviceOption")
-@onready var midi_refresh_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/MidiRefreshButton")
 @onready var record_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/RecordButton")
 @onready var shared_scroll_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/SharedScrollButton")
 @onready var track_name_edit: LineEdit = get_node_or_null("RootLayout/TopBar/TopBarContent/TrackNameEdit")
@@ -38,6 +44,8 @@ const ADSR_SUSTAIN_MAX_DB := 0.0
 @onready var loading_label: Label = get_node_or_null("LoadingOverlay/LoadingCenter/LoadingBox/LoadingLabel")
 @onready var loading_bar: ProgressBar = get_node_or_null("LoadingOverlay/LoadingCenter/LoadingBox/LoadingBar")
 @onready var soundfont_button: Button = get_node_or_null("RootLayout/MainSplit/RightSplit/TransportPanel/TransportContent/TransportBar/SoundFontButton")
+@onready var instrument_dialog: AcceptDialog = get_node_or_null("InstrumentDialog")
+@onready var instrument_select: ItemList = get_node_or_null("InstrumentDialog/InstrumentSelect")
 @onready var root_layout: Control = $"RootLayout"
 @onready var top_bar: Control = $"RootLayout/TopBar"
 @onready var main_split: SplitContainer = $"RootLayout/MainSplit"
@@ -62,7 +70,7 @@ const ADSR_SUSTAIN_MAX_DB := 0.0
 @onready var selection_bar_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarSpacer"
 @onready var history_back_button: Button = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarSpacer/HistoryBackButton"
 @onready var history_forward_button: Button = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarSpacer/HistoryForwardButton"
-@onready var panel_sync_button: Button = get_node_or_null("RootLayout/TopBar/TopBarContent/PanelSyncButton")
+@onready var panel_sync_button: Button = get_node_or_null("RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/PanelSyncButton")
 @onready var selection_bar_right_spacer: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarRightSpacer"
 @onready var selection_bar: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/SelectionBarRow/SelectionBarFrame/SelectionBar"
 @onready var panel_slot_a: Control = $"RootLayout/MainSplit/RightSplit/PianoRollPanel/RollArea/PanelSplit/PanelSplitContainer/PanelSlotA"
@@ -122,12 +130,21 @@ var _track_tree_build_root: TreeItem = null
 var _track_tree_build_tracks: Array = []
 var _track_tree_build_index := 0
 var _midi_device_names: Array = []
-var _selected_midi_device_index := -1
+var _selected_midi_device_index := MIDI_DEVICE_ALL_ID
+var _selected_midi_device_name := ""
 var _midi_has_device_field := false
+var _midi_inputs_opened := false
 var _is_recording := false
 var _record_start_time_sec := 0.0
 var _record_start_beats := 0.0
 var _record_active_notes: Dictionary = {}
+var _program_helper: EngineSnapshotBuilder = SNAPSHOT_BUILDER.new()
+var _instrument_track_index := -1
+var _instrument_track_soundfont_path := ""
+var _instrument_item_lookup: Dictionary = {}
+var _instrument_preview_state: Dictionary = {}
+var _instrument_preview_timer: SceneTreeTimer = null
+var _instrument_selecting := false
 
 func _ready() -> void:
 	set_process_input(true)
@@ -160,6 +177,11 @@ func _input(event: InputEvent) -> void:
 	if _is_import_blocking():
 		get_viewport().set_input_as_handled()
 		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_SPACE and not _is_text_input_focused():
+			_toggle_transport_playback()
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventMIDI:
 		_handle_midi_input(event)
 
@@ -168,9 +190,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE:
 			_toggle_panel_fullscreen()
 			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_SPACE:
-			_toggle_transport_playback()
-			get_viewport().set_input_as_handled()
+
+func _is_text_input_focused() -> bool:
+	var focus = get_viewport().gui_get_focus_owner()
+	return focus is LineEdit or focus is TextEdit
 
 func _ensure_project_model() -> void:
 	if project_model != null:
@@ -200,10 +223,10 @@ func _init_controls() -> void:
 		var device_callable = Callable(self, "_on_midi_device_selected")
 		if not midi_device_option.is_connected("item_selected", device_callable):
 			midi_device_option.connect("item_selected", device_callable)
-	if midi_refresh_button != null and midi_refresh_button.has_signal("pressed"):
-		var refresh_callable = Callable(self, "_on_midi_refresh_pressed")
-		if not midi_refresh_button.is_connected("pressed", refresh_callable):
-			midi_refresh_button.connect("pressed", refresh_callable)
+	if midi_device_option != null and midi_device_option.has_signal("pressed"):
+		var device_pressed_callable = Callable(self, "_on_midi_device_pressed")
+		if not midi_device_option.is_connected("pressed", device_pressed_callable):
+			midi_device_option.connect("pressed", device_pressed_callable)
 	if record_button != null and record_button.has_signal("toggled"):
 		record_button.toggle_mode = true
 		var record_callable = Callable(self, "_on_record_toggled")
@@ -223,6 +246,18 @@ func _init_controls() -> void:
 		soundfont_dialog.filters = PackedStringArray(["*.sf2 ; SoundFont files"])
 		if not soundfont_dialog.file_selected.is_connected(_on_soundfont_file_selected):
 			soundfont_dialog.file_selected.connect(_on_soundfont_file_selected)
+	if instrument_dialog != null:
+		instrument_dialog.title = "Select Instrument"
+		if not instrument_dialog.confirmed.is_connected(_on_instrument_dialog_confirmed):
+			instrument_dialog.confirmed.connect(_on_instrument_dialog_confirmed)
+		if instrument_dialog.has_signal("midi_input"):
+			var midi_callable = Callable(self, "_on_instrument_dialog_midi_input")
+			if not instrument_dialog.is_connected("midi_input", midi_callable):
+				instrument_dialog.connect("midi_input", midi_callable)
+	if instrument_select != null and instrument_select.has_signal("item_selected"):
+		var select_callable = Callable(self, "_on_instrument_item_selected")
+		if not instrument_select.is_connected("item_selected", select_callable):
+			instrument_select.connect("item_selected", select_callable)
 	if shared_scroll_button != null and shared_scroll_button.has_signal("pressed"):
 		shared_scroll_button.toggle_mode = true
 		var shared_callable = Callable(self, "_on_shared_scroll_pressed")
@@ -352,6 +387,14 @@ func _init_panel_slots() -> void:
 			var double_callable = Callable(self, "_on_arrangement_clip_double_clicked")
 			if not slot.is_connected("arrangement_clip_double_clicked", double_callable):
 				slot.connect("arrangement_clip_double_clicked", double_callable)
+		if slot.has_signal("arrangement_playhead_drag_started"):
+			var playhead_start_callable = Callable(self, "_on_arrangement_playhead_drag_started")
+			if not slot.is_connected("arrangement_playhead_drag_started", playhead_start_callable):
+				slot.connect("arrangement_playhead_drag_started", playhead_start_callable)
+		if slot.has_signal("arrangement_playhead_time_changed"):
+			var playhead_time_callable = Callable(self, "_on_arrangement_playhead_time_changed")
+			if not slot.is_connected("arrangement_playhead_time_changed", playhead_time_callable):
+				slot.connect("arrangement_playhead_time_changed", playhead_time_callable)
 		if slot.has_signal("snap_changed"):
 			var snap_callable = Callable(self, "_on_slot_snap_changed")
 			if not slot.is_connected("snap_changed", snap_callable):
@@ -926,6 +969,13 @@ func _on_arrangement_clip_double_clicked(slot_index: int, track_index: int, clip
 	if target_slot.has_method("center_roll_on_pitch"):
 		target_slot.call_deferred("center_roll_on_pitch", pitch)
 
+func _on_arrangement_playhead_drag_started(_slot_idx: int) -> void:
+	if playback_engine != null and bool(playback_engine.call("get_is_playing")):
+		playback_engine.call("pause")
+
+func _on_arrangement_playhead_time_changed(_slot_idx: int, time_beats: float) -> void:
+	_set_arrangement_playhead_time(time_beats)
+
 func _on_selection_double_clicked(start_beats: float, end_beats: float) -> void:
 	if active_slot == null:
 		return
@@ -1168,7 +1218,7 @@ func _on_track_tree_track_selected(index: int) -> void:
 	if updating_track_list or active_slot == null:
 		return
 	active_slot.call("select_track", index)
-	_on_soundfont_pressed()
+	_show_instrument_dialog_for_track(index)
 
 func _on_track_tree_clip_selected(track_index: int, clip_index: int, _clip: Node) -> void:
 	if updating_track_list or active_slot == null:
@@ -1518,7 +1568,6 @@ func _setup_midi_player() -> void:
 
 func _setup_midi_input() -> void:
 	_detect_midi_device_field()
-	OS.open_midi_inputs()
 	_refresh_midi_devices()
 
 func _detect_midi_device_field() -> void:
@@ -1529,32 +1578,123 @@ func _detect_midi_device_field() -> void:
 			return
 	_midi_has_device_field = false
 
+func _ensure_midi_inputs_open() -> void:
+	if _midi_inputs_opened:
+		return
+	OS.open_midi_inputs()
+	_midi_inputs_opened = true
+
+func _close_midi_inputs() -> void:
+	if not _midi_inputs_opened:
+		return
+	if OS.has_method("close_midi_inputs"):
+		OS.close_midi_inputs()
+	_midi_inputs_opened = false
+
+func _reopen_midi_inputs() -> void:
+	_close_midi_inputs()
+	_ensure_midi_inputs_open()
+	_probe_midi_inputs()
+
+func _probe_midi_inputs() -> void:
+	var names = OS.get_connected_midi_inputs()
+	if names.is_empty():
+		_midi_inputs_opened = false
+		push_warning("MIDI inputs not available (empty device list after open).")
+
 func _refresh_midi_devices() -> void:
-	_midi_device_names = OS.get_connected_midi_inputs()
 	if midi_device_option == null:
 		return
+	var names = OS.get_connected_midi_inputs()
+	if names.size() > 0:
+		_midi_device_names = names
 	midi_device_option.clear()
-	midi_device_option.add_item("All Devices", -1)
+	var none_index = midi_device_option.item_count
+	midi_device_option.add_item("", MIDI_DEVICE_NONE_ID)
+	midi_device_option.add_item("none", MIDI_DEVICE_ALL_ID)
 	for i in range(_midi_device_names.size()):
 		midi_device_option.add_item(String(_midi_device_names[i]), i)
+	var popup = midi_device_option.get_popup()
+	if popup != null:
+		if popup.has_method("set_item_hidden"):
+			popup.call("set_item_hidden", none_index, true)
+		elif popup.has_method("set_item_disabled"):
+			popup.call("set_item_disabled", none_index, true)
+	if _selected_midi_device_index == MIDI_DEVICE_ALL_ID:
+		for i in range(midi_device_option.item_count):
+			if midi_device_option.get_item_id(i) == MIDI_DEVICE_ALL_ID:
+				midi_device_option.select(i)
+				_set_midi_device_button_label()
+				return
+	if _selected_midi_device_index == MIDI_DEVICE_NONE_ID:
+		for i in range(midi_device_option.item_count):
+			if midi_device_option.get_item_id(i) == MIDI_DEVICE_NONE_ID:
+				midi_device_option.select(i)
+				_set_midi_device_button_label()
+				return
+	if _selected_midi_device_name != "":
+		var match_index = _midi_device_names.find(_selected_midi_device_name)
+		if match_index >= 0:
+			_selected_midi_device_index = match_index
+			for i in range(midi_device_option.item_count):
+				if midi_device_option.get_item_id(i) == match_index:
+					midi_device_option.select(i)
+					_set_midi_device_button_label()
+					return
 	if _selected_midi_device_index < 0:
+		for i in range(midi_device_option.item_count):
+			if midi_device_option.get_item_id(i) == MIDI_DEVICE_ALL_ID:
+				midi_device_option.select(i)
+				_selected_midi_device_index = MIDI_DEVICE_ALL_ID
+				_selected_midi_device_name = ""
+				_set_midi_device_button_label()
+				return
 		midi_device_option.select(0)
+		_selected_midi_device_index = MIDI_DEVICE_ALL_ID
+		_selected_midi_device_name = ""
+		_set_midi_device_button_label()
 		return
 	for i in range(midi_device_option.item_count):
 		if midi_device_option.get_item_id(i) == _selected_midi_device_index:
 			midi_device_option.select(i)
+			_set_midi_device_button_label()
+			return
+	for i in range(midi_device_option.item_count):
+		if midi_device_option.get_item_id(i) == MIDI_DEVICE_ALL_ID:
+			midi_device_option.select(i)
+			_selected_midi_device_index = MIDI_DEVICE_ALL_ID
+			_selected_midi_device_name = ""
+			_set_midi_device_button_label()
 			return
 	midi_device_option.select(0)
-	_selected_midi_device_index = -1
+	_selected_midi_device_index = MIDI_DEVICE_ALL_ID
+	_selected_midi_device_name = ""
+	_set_midi_device_button_label()
 
-func _on_midi_refresh_pressed() -> void:
-	OS.open_midi_inputs()
+func _on_midi_device_pressed() -> void:
+	if _selected_midi_device_index != MIDI_DEVICE_NONE_ID:
+		_reopen_midi_inputs()
 	_refresh_midi_devices()
 
 func _on_midi_device_selected(index: int) -> void:
 	if midi_device_option == null:
 		return
-	_selected_midi_device_index = midi_device_option.get_item_id(index)
+	var previous_id = _selected_midi_device_index
+	var device_id = midi_device_option.get_item_id(index)
+	_selected_midi_device_index = device_id
+	_selected_midi_device_name = ""
+	if device_id == MIDI_DEVICE_ALL_ID:
+		if previous_id == MIDI_DEVICE_ALL_ID:
+			_selected_midi_device_index = MIDI_DEVICE_NONE_ID
+			_close_midi_inputs()
+			_refresh_midi_devices()
+			return
+		_reopen_midi_inputs()
+		_set_midi_device_button_label()
+		return
+	_reopen_midi_inputs()
+	_selected_midi_device_name = String(midi_device_option.get_item_text(index))
+	_set_midi_device_button_label()
 
 func _setup_soundfont_manager() -> void:
 	if soundfont_manager != null:
@@ -1568,6 +1708,14 @@ func _setup_soundfont_manager() -> void:
 		soundfont_manager.call("set_project_model", project_model)
 	if soundfont_manager.has_method("set_default_soundfont_path"):
 		soundfont_manager.call("set_default_soundfont_path", soundfont_path)
+	if soundfont_manager.has_signal("bank_load_started"):
+		var start_callable = Callable(self, "_on_soundfont_load_started")
+		if not soundfont_manager.is_connected("bank_load_started", start_callable):
+			soundfont_manager.connect("bank_load_started", start_callable)
+	if soundfont_manager.has_signal("bank_load_finished"):
+		var finish_callable = Callable(self, "_on_soundfont_load_finished")
+		if not soundfont_manager.is_connected("bank_load_finished", finish_callable):
+			soundfont_manager.connect("bank_load_finished", finish_callable)
 	if playback_engine != null and playback_engine.has_method("set_track_router"):
 		playback_engine.call("set_track_router", soundfont_manager)
 	if panel_slot_a != null and panel_slot_a.has_method("set_soundfont_manager"):
@@ -1591,23 +1739,7 @@ func _setup_playback_engine() -> void:
 			playback_engine.connect("finished", finished_callable)
 
 func _on_play_pressed() -> void:
-	if playback_engine == null or project_model == null:
-		return
-	var mode = _resolve_playback_mode()
-	playback_mode = mode
-	playback_slot = active_slot if mode == PLAYBACK_MODE_CLIP else null
-	var track_index = 0
-	var clip_index = 0
-	if active_slot != null and active_slot.has_method("get_active_track_index"):
-		track_index = int(active_slot.call("get_active_track_index"))
-	if active_slot != null and active_slot.has_method("get_active_clip_index"):
-		clip_index = int(active_slot.call("get_active_clip_index"))
-	playback_engine.call("set_playback_target", mode, track_index, clip_index)
-	if mode == PLAYBACK_MODE_CLIP:
-		_set_arrangement_playhead_time(-1.0)
-	var start_beats = _get_playhead_start_beats(mode)
-	_set_playhead_for_playback(start_beats)
-	playback_engine.call("play", start_beats)
+	_play_from_slot(active_slot)
 
 func _on_pause_pressed() -> void:
 	if playback_engine == null:
@@ -1629,7 +1761,60 @@ func _toggle_transport_playback() -> void:
 	if bool(playback_engine.call("get_is_playing")):
 		_on_pause_pressed()
 		return
-	_on_play_pressed()
+	var target_slot = _resolve_space_play_slot()
+	_play_from_slot(target_slot)
+
+func _resolve_space_play_slot() -> Node:
+	var active = active_slot
+	var other = panel_slot_b if active == panel_slot_a else panel_slot_a
+	if _slot_can_play(active):
+		return active
+	if _slot_can_play(other):
+		return other
+	if other != null and other.has_method("set_panel_mode"):
+		other.call("set_panel_mode", "arrangement")
+		return other
+	return active
+
+func _slot_can_play(slot: Node) -> bool:
+	if slot == null or not slot.has_method("get_panel_mode"):
+		return false
+	var mode = String(slot.call("get_panel_mode"))
+	if mode == "arrangement":
+		return true
+	if mode != "roll" and mode != "piano" and mode != "step":
+		return false
+	if not slot.has_method("get_active_track") or not slot.has_method("get_active_clip_index"):
+		return false
+	var track = slot.call("get_active_track")
+	var clip_index = int(slot.call("get_active_clip_index"))
+	var clips = track.get("clips") if track != null else null
+	if not (clips is Array and clip_index >= 0 and clip_index < clips.size()):
+		return false
+	var clip = clips[clip_index]
+	if clip == null or not clip.has_method("get"):
+		return false
+	var notes = clip.get("notes")
+	return notes is Array and not notes.is_empty()
+
+func _play_from_slot(slot: Node) -> void:
+	if playback_engine == null or project_model == null or slot == null:
+		return
+	var mode = _resolve_playback_mode_for_slot(slot)
+	playback_mode = mode
+	playback_slot = slot if mode == PLAYBACK_MODE_CLIP else null
+	var track_index = 0
+	var clip_index = 0
+	if slot.has_method("get_active_track_index"):
+		track_index = int(slot.call("get_active_track_index"))
+	if slot.has_method("get_active_clip_index"):
+		clip_index = int(slot.call("get_active_clip_index"))
+	playback_engine.call("set_playback_target", mode, track_index, clip_index)
+	if mode == PLAYBACK_MODE_CLIP:
+		_set_arrangement_playhead_time(-1.0)
+	var start_beats = _get_playhead_start_beats_for_slot(mode, slot)
+	_set_playhead_for_playback(start_beats)
+	playback_engine.call("play", start_beats)
 
 func _on_soundfont_pressed() -> void:
 	if soundfont_dialog == null:
@@ -1652,11 +1837,24 @@ func _apply_soundfont_selection(path: String) -> void:
 	_apply_soundfont()
 	_update_soundfont_button()
 
-func _on_soundfont_load_started(_path: String) -> void:
-	pass
+func _on_soundfont_load_started(path: String) -> void:
+	if instrument_dialog == null or not instrument_dialog.visible:
+		return
+	if path == "" or path != _instrument_track_soundfont_path:
+		return
+	if instrument_select != null:
+		instrument_select.clear()
+		instrument_select.add_item("Loading SoundFont...")
+		_set_instrument_select_enabled(false)
 
-func _on_soundfont_load_finished(_path: String, _success: bool) -> void:
-	pass
+func _on_soundfont_load_finished(path: String, _success: bool) -> void:
+	if instrument_dialog == null or not instrument_dialog.visible:
+		return
+	if path == "" or path != _instrument_track_soundfont_path:
+		return
+	var track = _track_by_index(_instrument_track_index)
+	_ensure_instrument_list(track)
+	_select_instrument_for_track(track)
 
 func _apply_soundfont() -> void:
 	var track = _get_active_track()
@@ -1680,6 +1878,168 @@ func _update_soundfont_button() -> void:
 		soundfont_button.tooltip_text = "SoundFont (Default): %s" % label
 	else:
 		soundfont_button.tooltip_text = "SoundFont"
+
+func _ensure_instrument_list(track: Node) -> void:
+	if instrument_select == null:
+		return
+	instrument_select.clear()
+	_set_instrument_select_enabled(true)
+	_instrument_item_lookup.clear()
+	var path = _resolve_soundfont_path_for_track(track)
+	_instrument_track_soundfont_path = path
+	if path != "" and soundfont_manager != null and soundfont_manager.has_method("get_bank_for_path"):
+		var bank = soundfont_manager.call("get_bank_for_path", path)
+		if bank == null:
+			instrument_select.add_item("Loading SoundFont...")
+			_set_instrument_select_enabled(false)
+			return
+		if _populate_instrument_list_from_bank(bank):
+			return
+	_populate_instrument_list_gm()
+
+func _populate_instrument_list_from_bank(bank: Object) -> bool:
+	if bank == null or not bank.has_method("get"):
+		return false
+	var presets = bank.get("presets")
+	if not (presets is Dictionary) or presets.is_empty():
+		return false
+	var keys = presets.keys()
+	keys.sort()
+	for key in keys:
+		var preset = presets.get(key)
+		if preset == null:
+			continue
+		var program = int(key) & 0x7F
+		var bank_number = int(key) >> 7
+		var preset_name := ""
+		if preset.has_method("get"):
+			preset_name = str(preset.get("name"))
+		elif "name" in preset:
+			preset_name = str(preset.name)
+		if preset_name == "":
+			preset_name = "Program %03d" % (program + 1)
+		var label = "B%03d P%03d %s" % [bank_number, program + 1, preset_name]
+		instrument_select.add_item(label)
+		var index = instrument_select.item_count - 1
+		instrument_select.set_item_metadata(index, {
+			"program": program,
+			"bank": bank_number
+		})
+		_instrument_item_lookup["%d:%d" % [bank_number, program]] = index
+	_set_instrument_select_enabled(true)
+	return instrument_select.item_count > 0
+
+func _populate_instrument_list_gm() -> void:
+	if instrument_select == null:
+		return
+	var names = SNAPSHOT_BUILDER.GM_PROGRAM_NAMES
+	for i in range(names.size()):
+		var label = "%03d %s" % [i + 1, names[i]]
+		instrument_select.add_item(label)
+		instrument_select.set_item_metadata(i, {
+			"program": i,
+			"bank": 0
+		})
+		_instrument_item_lookup["0:%d" % i] = i
+
+func _set_instrument_select_enabled(enabled: bool) -> void:
+	if instrument_select == null:
+		return
+	instrument_select.mouse_filter = Control.MOUSE_FILTER_STOP if enabled else Control.MOUSE_FILTER_IGNORE
+	instrument_select.modulate = Color(1, 1, 1, 1) if enabled else Color(1, 1, 1, 0.6)
+
+func _program_for_track(track: Node) -> int:
+	var program_index := -1
+	if track != null and track.has_method("get"):
+		program_index = int(track.get("program_index"))
+	if program_index < 0 and _program_helper != null:
+		var label := ""
+		if track != null and track.has_method("get"):
+			label = str(track.get("track_name"))
+		program_index = int(_program_helper.program_index_from_label(label))
+	return clamp(program_index, 0, 127)
+
+func _program_bank_for_track(track: Node) -> int:
+	if track != null and track.has_method("get"):
+		return max(0, int(track.get("program_bank")))
+	return 0
+
+func _select_instrument_for_track(track: Node) -> void:
+	if instrument_select == null or instrument_select.item_count == 0:
+		return
+	var program = _program_for_track(track)
+	var bank = _program_bank_for_track(track)
+	var key = "%d:%d" % [bank, program]
+	var index := -1
+	if _instrument_item_lookup.has(key):
+		index = int(_instrument_item_lookup[key])
+	elif bank != 0:
+		var fallback_key = "0:%d" % program
+		if _instrument_item_lookup.has(fallback_key):
+			index = int(_instrument_item_lookup[fallback_key])
+	elif program >= 0 and program < instrument_select.item_count:
+		index = program
+	if index >= 0:
+		_instrument_selecting = true
+		instrument_select.select(index)
+		_instrument_selecting = false
+		if instrument_select.has_method("ensure_current_is_visible"):
+			instrument_select.ensure_current_is_visible()
+
+func _show_instrument_dialog_for_track(track_index: int) -> void:
+	if instrument_dialog == null or instrument_select == null:
+		return
+	_instrument_track_index = track_index
+	var track = _track_by_index(track_index)
+	_ensure_instrument_list(track)
+	_select_instrument_for_track(track)
+	_apply_track_program_to_route(track_index)
+	instrument_dialog.popup_centered_ratio(0.4)
+
+func _on_instrument_dialog_confirmed() -> void:
+	if instrument_select == null:
+		return
+	var selected = instrument_select.get_selected_items()
+	if selected.is_empty():
+		return
+	_apply_instrument_selection_from_index(int(selected[0]))
+
+func _on_instrument_item_selected(index: int) -> void:
+	if _instrument_selecting:
+		return
+	_apply_instrument_selection_from_index(index)
+
+func _apply_instrument_selection_from_index(index: int) -> void:
+	if instrument_select == null:
+		return
+	var data = instrument_select.get_item_metadata(index)
+	var program = index
+	var bank = 0
+	if data is Dictionary:
+		program = int(data.get("program", program))
+		bank = int(data.get("bank", bank))
+	_apply_instrument_selection(program, bank, true)
+
+func _apply_instrument_selection(program: int, bank: int, preview: bool) -> void:
+	var track = _track_by_index(_instrument_track_index)
+	if track == null:
+		return
+	var needs_emit := false
+	if track.has_method("set_program_index"):
+		track.call("set_program_index", program)
+	else:
+		track.set("program_index", program)
+		needs_emit = true
+	if track.has_method("set_program_bank"):
+		track.call("set_program_bank", bank)
+	else:
+		track.set("program_bank", bank)
+		needs_emit = true
+	if needs_emit and track.has_signal("changed"):
+		track.emit_signal("changed")
+	_apply_program_to_route(_instrument_track_index, track, program, bank)
+	if preview:
+		_preview_instrument(_instrument_track_index, track, program, bank)
 
 func _get_active_track() -> Node:
 	if active_slot != null and active_slot.has_method("get_active_track"):
@@ -1712,6 +2072,16 @@ func _soundfont_label_for_track(track: Node) -> String:
 		return "SF: (default) %s" % soundfont_path.get_file()
 	return "SF: (none)"
 
+func _resolve_soundfont_path_for_track(track: Node) -> String:
+	var track_path := ""
+	if track != null and track.has_method("get"):
+		track_path = str(track.get("soundfont_path"))
+	if _is_soundfont_path_valid(track_path):
+		return track_path
+	if _is_soundfont_path_valid(soundfont_path):
+		return soundfont_path
+	return ""
+
 func _project_label() -> String:
 	if project_model == null:
 		return "Project"
@@ -1734,6 +2104,13 @@ func _is_soundfont_path_valid(path: String) -> bool:
 func _resolve_playback_mode() -> String:
 	if active_slot != null and active_slot.has_method("get_panel_mode"):
 		var mode = String(active_slot.call("get_panel_mode"))
+		if mode == "arrangement":
+			return PLAYBACK_MODE_TRACKS
+	return PLAYBACK_MODE_CLIP
+
+func _resolve_playback_mode_for_slot(slot: Node) -> String:
+	if slot != null and slot.has_method("get_panel_mode"):
+		var mode = String(slot.call("get_panel_mode"))
 		if mode == "arrangement":
 			return PLAYBACK_MODE_TRACKS
 	return PLAYBACK_MODE_CLIP
@@ -1792,17 +2169,64 @@ func _handle_midi_input(event: InputEventMIDI) -> void:
 	if _is_recording:
 		_record_midi_note(int(event.pitch), int(event.velocity), is_note_on, channel)
 
+func _on_instrument_dialog_midi_input(event: InputEventMIDI) -> void:
+	if _instrument_track_index < 0:
+		_handle_midi_input(event)
+		return
+	if not _matches_selected_midi_device(event):
+		return
+	var is_note_on = event.message == MIDI_MESSAGE_NOTE_ON and event.velocity > 0
+	var is_note_off = event.message == MIDI_MESSAGE_NOTE_OFF or (
+		event.message == MIDI_MESSAGE_NOTE_ON and event.velocity <= 0
+	)
+	if not (is_note_on or is_note_off):
+		return
+	var route = _resolve_route_for_track(_instrument_track_index)
+	var target_player = route.get("player", midi_player)
+	var channel = int(route.get("channel", 0))
+	var track = route.get("track")
+	if is_note_on:
+		_apply_track_program_to_route(_instrument_track_index)
+		if _track_has_adsr_override(track):
+			_apply_track_adsr_to_player(track, target_player, channel)
+	_send_live_midi_note(target_player, channel, int(event.pitch), int(event.velocity), is_note_on)
+	_forward_midi_to_piano(int(event.pitch), is_note_on)
+
 func _matches_selected_midi_device(event: InputEventMIDI) -> bool:
-	if _selected_midi_device_index < 0:
+	if _selected_midi_device_index == MIDI_DEVICE_NONE_ID:
+		return false
+	if _selected_midi_device_index == MIDI_DEVICE_ALL_ID:
 		return true
 	if not _midi_has_device_field:
 		return true
 	return int(event.device) == _selected_midi_device_index
 
+func _set_midi_device_button_label() -> void:
+	if midi_device_option == null:
+		return
+	midi_device_option.text = MIDI_DEVICE_LABEL
+
 func _resolve_active_track_route() -> Dictionary:
 	var track_index := 0
 	if active_slot != null and active_slot.has_method("get_active_track_index"):
 		track_index = int(active_slot.call("get_active_track_index"))
+	var track = _track_by_index(track_index)
+	if soundfont_manager != null and soundfont_manager.has_method("get_route_for_track"):
+		var route = soundfont_manager.call("get_route_for_track", track_index, track)
+		if route is Dictionary:
+			if not route.has("track_index"):
+				route["track_index"] = track_index
+			if not route.has("track"):
+				route["track"] = track
+			return route
+	return {
+		"player": midi_player,
+		"channel": track_index % 16,
+		"track_index": track_index,
+		"track": track
+	}
+
+func _resolve_route_for_track(track_index: int) -> Dictionary:
 	var track = _track_by_index(track_index)
 	if soundfont_manager != null and soundfont_manager.has_method("get_route_for_track"):
 		var route = soundfont_manager.call("get_route_for_track", track_index, track)
@@ -1833,6 +2257,76 @@ func _send_live_midi_note(player: Node, channel: int, pitch: int, velocity: int,
 		midi_event.pitch = pitch
 		midi_event.velocity = 0
 	player.call("receive_raw_midi_message", midi_event)
+
+func _send_live_program_change(player: Node, channel: int, program: int, bank: int) -> void:
+	if player == null or not player.has_method("receive_raw_midi_message"):
+		return
+	var clamped_program = clamp(program, 0, 127)
+	var clamped_bank = max(0, bank)
+	var bank_msb = (clamped_bank >> 7) & 0x7F
+	var bank_lsb = clamped_bank & 0x7F
+	var bank_event = InputEventMIDI.new()
+	bank_event.channel = channel
+	bank_event.message = MIDI_MESSAGE_CONTROL_CHANGE
+	bank_event.controller_number = 0
+	bank_event.controller_value = bank_msb
+	player.call("receive_raw_midi_message", bank_event)
+	var bank_lsb_event = InputEventMIDI.new()
+	bank_lsb_event.channel = channel
+	bank_lsb_event.message = MIDI_MESSAGE_CONTROL_CHANGE
+	bank_lsb_event.controller_number = 32
+	bank_lsb_event.controller_value = bank_lsb
+	player.call("receive_raw_midi_message", bank_lsb_event)
+	var program_event = InputEventMIDI.new()
+	program_event.channel = channel
+	program_event.message = MIDI_MESSAGE_PROGRAM_CHANGE
+	program_event.instrument = clamped_program
+	player.call("receive_raw_midi_message", program_event)
+
+func _apply_track_program_to_route(track_index: int) -> void:
+	var track = _track_by_index(track_index)
+	if track == null:
+		return
+	var program = _program_for_track(track)
+	var bank = _program_bank_for_track(track)
+	_apply_program_to_route(track_index, track, program, bank)
+
+func _apply_program_to_route(track_index: int, track: Node, program: int, bank: int) -> void:
+	var route = _resolve_route_for_track(track_index)
+	var player = route.get("player", midi_player)
+	var channel = int(route.get("channel", 0))
+	if _track_has_adsr_override(track):
+		_apply_track_adsr_to_player(track, player, channel)
+	_send_live_program_change(player, channel, program, bank)
+
+func _preview_instrument(track_index: int, track: Node, program: int, bank: int) -> void:
+	_stop_instrument_preview_note()
+	var route = _resolve_route_for_track(track_index)
+	var player = route.get("player", midi_player)
+	var channel = int(route.get("channel", 0))
+	if _track_has_adsr_override(track):
+		_apply_track_adsr_to_player(track, player, channel)
+	_send_live_program_change(player, channel, program, bank)
+	_send_live_midi_note(player, channel, INSTRUMENT_PREVIEW_PITCH, INSTRUMENT_PREVIEW_VELOCITY, true)
+	_instrument_preview_state = {
+		"player": player,
+		"channel": channel,
+		"pitch": INSTRUMENT_PREVIEW_PITCH
+	}
+	if get_tree() != null:
+		_instrument_preview_timer = get_tree().create_timer(INSTRUMENT_PREVIEW_SECONDS)
+		if _instrument_preview_timer != null:
+			_instrument_preview_timer.timeout.connect(_stop_instrument_preview_note)
+
+func _stop_instrument_preview_note() -> void:
+	if _instrument_preview_state.is_empty():
+		return
+	var player = _instrument_preview_state.get("player")
+	var channel = int(_instrument_preview_state.get("channel", 0))
+	var pitch = int(_instrument_preview_state.get("pitch", 0))
+	_send_live_midi_note(player, channel, pitch, 0, false)
+	_instrument_preview_state.clear()
+	_instrument_preview_timer = null
 
 func _apply_track_adsr_to_player(track: Node, player: Node, channel: int) -> void:
 	if track == null or player == null:
@@ -1999,6 +2493,20 @@ func _get_playhead_start_beats(mode: String) -> float:
 	else:
 		if active_slot.has_method("get_roll_playhead_time"):
 			beats = float(active_slot.call("get_roll_playhead_time"))
+	if beats < 0.0:
+		beats = 0.0
+	return beats
+
+func _get_playhead_start_beats_for_slot(mode: String, slot: Node) -> float:
+	if slot == null:
+		return 0.0
+	var beats = 0.0
+	if mode == PLAYBACK_MODE_TRACKS:
+		if slot.has_method("get_arrangement_playhead_time"):
+			beats = float(slot.call("get_arrangement_playhead_time"))
+	else:
+		if slot.has_method("get_roll_playhead_time"):
+			beats = float(slot.call("get_roll_playhead_time"))
 	if beats < 0.0:
 		beats = 0.0
 	return beats
